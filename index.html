@@ -1483,6 +1483,8 @@ function publicMenuProjectionFromPOS(docId, data) {
   station: String(data.station || ''),
   description: String(data.description || ''),
   imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : '',
+  // Preserve combo/build details so the customer-facing catalogue matches POS.
+  ...(Array.isArray(data.items) ? {items: data.items.map(value => String(value))} : {}),
   active: data.active !== false && data.available !== false,
   available: data.available !== false,
   displayOrder: Number.isFinite(displayOrder) ? displayOrder : 9999
@@ -1554,6 +1556,18 @@ function syncPublicMenuFromPOSSnapshot(snapshot) {
   publicMenuMirrorPrimed = false;
  });
  return publicMenuMirrorQueue;
+}
+
+async function syncDigitalMenuNow(){
+ if(!firebaseReady()) return toast('Connect to Firebase before syncing the Digital Menu');
+ try{
+  const snap=await fs.getDocs(fs.collection(db,'menu'));
+  publicMenuMirrorPrimed=false;
+  publicMenuMirrorSignatures.clear();
+  await syncPublicMenuFromPOSSnapshot(snap);
+  await publicMenuMirrorQueue;
+  toast('Digital Menu synced with the current POS menu');
+ }catch(error){console.error('Manual Digital Menu sync failed:',error);toast('Could not sync Digital Menu. Check Firebase connection.');}
 }
 
 // The POS browser acts as the trusted order processor. This keeps checkout
@@ -2654,8 +2668,52 @@ th.qtyhead{text-align:right;width:${width===58?23:29}px}
   return {html,kotNumber};
 }
 
-// Manual print — used by the "Print KOT" buttons. Opens a real window,
-// which is fine here because it's always triggered by a user click.
+// Optional direct ESC/POS connection for supported USB/serial thermal printers.
+// Web Serial is available in Chromium desktop browsers on secure origins.
+let directThermalPrinterPort=null;
+async function connectThermalPrinter(){
+ if(!('serial' in navigator)) return toast('Direct USB/serial printing needs Chrome or Edge on the POS computer. Use the Windows default printer instead.');
+ try{
+  const ports=await navigator.serial.getPorts();
+  directThermalPrinterPort=ports[0]||await navigator.serial.requestPort();
+  if(!directThermalPrinterPort.readable && !directThermalPrinterPort.writable) await directThermalPrinterPort.open({baudRate:9600});
+  else if(!directThermalPrinterPort.writable) await directThermalPrinterPort.open({baudRate:9600});
+  toast('Thermal printer connected for direct printing');
+  render();
+ }catch(error){console.error('Printer connection failed:',error);toast(error?.name==='NotFoundError'?'No printer selected':'Could not connect printer. Check cable and driver.');}
+}
+async function disconnectThermalPrinter(){
+ try{if(directThermalPrinterPort?.readable || directThermalPrinterPort?.writable) await directThermalPrinterPort.close();}catch(error){console.warn(error);}
+ directThermalPrinterPort=null;toast('Direct printer disconnected');render();
+}
+function kotPlainText(source){
+ const lines=['FEELING HUNGRY','KITCHEN ORDER TICKET','--------------------------------',`KOT: ${source.kotCode||source.code||'-'}`,`ORDER: ${source.order||'-'}`,`TYPE: ${source.type||'-'}`,`TABLE: ${source.tableName||source.table||'-'}`,`CUSTOMER: ${source.customerName||'Walk-in'}`,`TIME: ${source.time||new Date().toLocaleTimeString('en-IN')}`,'--------------------------------'];
+ (Array.isArray(source.items)?source.items:[]).forEach(item=>{lines.push(`${item.name||'Item'}  x${Number(item.qty||0)}`);if(item.note)lines.push(`  NOTE: ${item.note}`);});
+ if(source.specialNotes)lines.push(`ORDER NOTE: ${source.specialNotes}`);
+ lines.push('--------------------------------','END OF KITCHEN TICKET','','');
+ return lines.join('\n');
+}
+async function printKOTDirect(source){
+ if(!directThermalPrinterPort?.writable) return false;
+ const writer=directThermalPrinterPort.writable.getWriter();
+ try{
+  const encoder=new TextEncoder();
+  const bytes=encoder.encode('\x1B@'+kotPlainText(source)+'\x1DVA\x00');
+  await writer.write(bytes);
+  return true;
+ }catch(error){console.error('Direct printer write failed:',error);toast('Printer write failed. Reconnect the printer.');return false;}
+ finally{writer.releaseLock();}
+}
+async function testThermalPrinter(){
+ const sample={kotCode:'TEST-001',order:'PRINTER TEST',type:'TEST',table:'—',customerName:'Printer Setup',items:[{name:'Printer test ticket',qty:1}]};
+ if(directThermalPrinterPort?.writable){const ok=await printKOTDirect(sample);if(ok)toast('Test ticket sent to printer');return;}
+ const w=window.open('','_blank','width=360,height=520');
+ if(!w) return toast('Allow pop-ups to print the test ticket');
+ w.document.open();w.document.write('<!doctype html><html><head><title>Printer Test</title><style>@page{size:58mm auto;margin:0}body{width:54mm;margin:0;padding:2mm;font: bold 12px Arial;color:#000}h2{text-align:center}hr{border:0;border-top:1px dashed #000}</style></head><body><h2>FEELING HUNGRY</h2><h3>PRINTER TEST</h3><hr><p>Test ticket: TEST-001</p><p>Printer setup successful if this page prints clearly.</p><hr><p>Thank you!</p><script>window.onload=()=>setTimeout(()=>window.print(),150);window.onafterprint=()=>window.close();<\/script></body></html>');w.document.close();
+}
+
+// Manual print — direct to a connected serial printer, otherwise use the
+// operating-system printer chooser through the browser's standard print flow.
 function printKOT(customOrder=null,targetWindow=null){
   const table=state.orderType==='DINE-IN'?sanitizeText(state.selectedTable,32):'—';
   const source=customOrder || {
@@ -2668,6 +2726,10 @@ function printKOT(customOrder=null,targetWindow=null){
     customerName:sanitizeText(state.pendingCustomer?.name||document.getElementById('custName')?.value||'',60),
     time:new Date().toLocaleTimeString('en-IN')
   };
+  if(directThermalPrinterPort?.writable){
+    printKOTDirect(source).then(ok=>{if(ok)toast('KOT sent directly to connected printer');});
+    return true;
+  }
   const built=buildKotTicketHTML(source,false);
   if(!built) return toast('Add items first');
   const w=targetWindow||window.open('','_blank','width=420,height=760');
@@ -4210,7 +4272,7 @@ async function updateStaff(id){
 }
 
 // ---------------- Settings ----------------
-function settings(){return pageTitle('Settings','Business, tax, discount, kitchen and printing preferences')+`<div class="grid two"><div class="card"><h2>Business</h2><div class="formgrid"><label>Business Name<input class="input" value="Feeling Hungry"></label><label>GSTIN<input class="input" placeholder="Optional"></label><label class="full">Address<textarea readonly>${esc(BUSINESS_ADDRESS)}</textarea></label><label>Phone<input class="input" placeholder="Business phone"></label><label>Email<input class="input" placeholder="Business email"></label></div></div><div class="card"><h2>POS & Printing</h2><div class="formgrid"><label>Tax %<input id="taxSet" class="input" type="number" min="0" max="100" step="0.01" value="${state.settings.tax}"></label><label>Default Discount %<input id="discountSet" class="input" type="number" min="0" max="100" step="0.01" value="${state.settings.discount||0}"></label><label>KOT Paper Width<select id="kotWidthSet" class="select"><option value="58" ${Number(state.settings.kotWidth||58)===58?'selected':''}>58 mm (POS58)</option><option value="79" ${Number(state.settings.kotWidth||58)===79?'selected':''}>79 mm</option></select></label><label>Receipt Width<select id="receiptSet" class="select"><option value="58" ${Number(state.settings.receipt||58)===58?'selected':''}>58 mm (POS58)</option><option value="79" ${Number(state.settings.receipt||58)===79?'selected':''}>79 mm</option></select></label><label>Default Order Type<select class="select"><option>DINE-IN</option><option>TAKEAWAY</option></select></label><label>Auto Print KOT for Online Orders<select id="autoPrintOnlineSet" class="select"><option value="on" ${state.autoPrintOnlineKots?'selected':''}>On — print kitchen ticket automatically</option><option value="off" ${!state.autoPrintOnlineKots?'selected':''}>Off — add tickets to KDS without auto-printing</option></select></label></div><div class="actions"><button class="btn primary" onclick="saveSettings()">Save Settings</button></div></div><div class="card"><h2>POS58 Thermal Printer Setup</h2><p class="muted">The supplied installer is a generic POS58 Windows printer-driver package. Install it on the POS computer, select the POS58 printer in Windows, set paper width to 58mm and disable browser headers and footers. This file now defaults both receipt and KOT layouts to 58mm. Test-feed and paper-cut behavior depend on the installed driver and printer hardware.</p></div><div class="card"><h2>Silent KOT Printing</h2><p class="muted">Every new Digital Menu / QR KOT is automatically sent to the kitchen printer when this POS is open and connected to Firebase — no repeated Print button clicks are needed. For silent printing without a Chrome dialog, configure Chrome kiosk printing on the POS computer and set the POS58 printer as the Windows default printer. Keep this POS tab open while taking online orders.</p><p class="muted"><b>Important:</b> Chrome must be started with the <code>--kiosk-printing</code> flag. Otherwise Chrome will show its print dialog and staff must select the POS58 printer.</p></div><div class="card firebase-device-card"><h2>Firebase Connection</h2><p class="muted">Shared Windows + Mobile project: <b>${firebaseConfig.projectId}</b></p><p class="muted">Current browser origin: <code>${esc(location.origin)}</code></p>${firebaseStatus==='connected'?'<span class="badge good">Connected — live Firestore sync active</span>':firebaseStatus==='error'?`<span class="badge bad">Connection error</span><p class="muted">${esc(firebaseError)}</p>`:'<span class="badge warn">Connecting…</span>'}<div style="margin-top:12px"><b>Mobile POS Device ID</b>${firebaseDeviceUid?`<code style="display:block;overflow-wrap:anywhere;word-break:break-all;padding:10px;margin-top:7px;border:1px solid rgba(255,255,255,.16);border-radius:9px;background:rgba(0,0,0,.25);color:#fff">${esc(firebaseDeviceUid)}</code><div class="actions"><button class="btn blue" type="button" onclick="copyPosDeviceUid()">Copy Mobile Device ID</button><button class="btn" type="button" onclick="reconnectFirebase()">Retry connection</button></div>`:'<p class="muted">The ID will appear after Firebase anonymous sign-in finishes.</p>'}</div><p class="muted" style="margin-top:10px">The mobile browser has its own persistent anonymous Firebase UID. Add this UID to the existing approved POS-device list in your Firestore Security Rules, alongside the Windows POS UID. Keep the existing restrictions; do not enable public database writes. Do not clear this PWA site data after approval.</p></div><div class="card"><h2>Customer & Receipt Data</h2><p class="muted">Customer name and mobile can be saved during billing. Entering the same mobile on a future bill automatically finds the saved customer. Receipts print on a white background with larger text.</p></div><div class="card"><h2>Data Integrity</h2><p class="muted">Orders, KOTs, menu, inventory, suppliers and expenses are stored in Firestore collections and sync in real time across devices. Historical order/menu prices are captured at time of sale.</p></div></div>`}
+function settings(){return pageTitle('Settings','Business, tax, discount, kitchen and printing preferences')+`<div class="grid two"><div class="card"><h2>Business</h2><div class="formgrid"><label>Business Name<input class="input" value="Feeling Hungry"></label><label>GSTIN<input class="input" placeholder="Optional"></label><label class="full">Address<textarea readonly>${esc(BUSINESS_ADDRESS)}</textarea></label><label>Phone<input class="input" placeholder="Business phone"></label><label>Email<input class="input" placeholder="Business email"></label></div></div><div class="card"><h2>POS & Printing</h2><div class="formgrid"><label>Tax %<input id="taxSet" class="input" type="number" min="0" max="100" step="0.01" value="${state.settings.tax}"></label><label>Default Discount %<input id="discountSet" class="input" type="number" min="0" max="100" step="0.01" value="${state.settings.discount||0}"></label><label>KOT Paper Width<select id="kotWidthSet" class="select"><option value="58" ${Number(state.settings.kotWidth||58)===58?'selected':''}>58 mm (POS58)</option><option value="79" ${Number(state.settings.kotWidth||58)===79?'selected':''}>79 mm</option></select></label><label>Receipt Width<select id="receiptSet" class="select"><option value="58" ${Number(state.settings.receipt||58)===58?'selected':''}>58 mm (POS58)</option><option value="79" ${Number(state.settings.receipt||58)===79?'selected':''}>79 mm</option></select></label><label>Default Order Type<select class="select"><option>DINE-IN</option><option>TAKEAWAY</option></select></label><label>Auto Print KOT for Online Orders<select id="autoPrintOnlineSet" class="select"><option value="on" ${state.autoPrintOnlineKots?'selected':''}>On — print kitchen ticket automatically</option><option value="off" ${!state.autoPrintOnlineKots?'selected':''}>Off — add tickets to KDS without auto-printing</option></select></label></div><div class="actions"><button class="btn primary" onclick="saveSettings()">Save Settings</button></div></div><div class="card"><h2>Thermal Printer Setup</h2><p class="muted">Connect a supported USB/serial thermal printer directly from this POS. For most Windows-installed Bluetooth, USB or network printers, use the system printer selection through the browser print window and set the printer as Windows default for automatic KOT printing.</p><div class="actions"><button class="btn blue" type="button" onclick="connectThermalPrinter()">＋ Add / Connect Printer</button><button class="btn" type="button" onclick="testThermalPrinter()">Print Test Ticket</button>${directThermalPrinterPort?'<button class="btn danger" type="button" onclick="disconnectThermalPrinter()">Disconnect Printer</button>':''}</div><p class="muted">${directThermalPrinterPort?'Direct printer connected in this session.':'No direct USB/serial printer connected. Browser printing will use the printer selected in the system print dialog.'}</p><p class="muted"><b>Compatibility:</b> Direct printing requires Chrome/Edge on a secure HTTPS origin and a printer exposed as a serial device. Standard Windows printer drivers remain supported through the normal print dialog.</p></div><div class="card"><h2>Digital Menu Sync</h2><p class="muted">The Digital Menu catalogue is mirrored from the POS menu in Firestore, including item names, categories, prices, descriptions, availability, images and combo details. Use this if you want to force a fresh sync.</p><button class="btn blue" type="button" onclick="syncDigitalMenuNow()">↻ Sync POS Menu to Digital Menu</button></div><div class="card"><h2>Silent KOT Printing</h2><p class="muted">Every new Digital Menu / QR KOT is automatically sent to the kitchen printer when this POS is open and connected to Firebase — no repeated Print button clicks are needed. For silent printing without a Chrome dialog, configure Chrome kiosk printing on the POS computer and set the POS58 printer as the Windows default printer. Keep this POS tab open while taking online orders.</p><p class="muted"><b>Important:</b> Chrome must be started with the <code>--kiosk-printing</code> flag. Otherwise Chrome will show its print dialog and staff must select the POS58 printer.</p></div><div class="card firebase-device-card"><h2>Firebase Connection</h2><p class="muted">Shared Windows + Mobile project: <b>${firebaseConfig.projectId}</b></p><p class="muted">Current browser origin: <code>${esc(location.origin)}</code></p>${firebaseStatus==='connected'?'<span class="badge good">Connected — live Firestore sync active</span>':firebaseStatus==='error'?`<span class="badge bad">Connection error</span><p class="muted">${esc(firebaseError)}</p>`:'<span class="badge warn">Connecting…</span>'}<div style="margin-top:12px"><b>Mobile POS Device ID</b>${firebaseDeviceUid?`<code style="display:block;overflow-wrap:anywhere;word-break:break-all;padding:10px;margin-top:7px;border:1px solid rgba(255,255,255,.16);border-radius:9px;background:rgba(0,0,0,.25);color:#fff">${esc(firebaseDeviceUid)}</code><div class="actions"><button class="btn blue" type="button" onclick="copyPosDeviceUid()">Copy Mobile Device ID</button><button class="btn" type="button" onclick="reconnectFirebase()">Retry connection</button></div>`:'<p class="muted">The ID will appear after Firebase anonymous sign-in finishes.</p>'}</div><p class="muted" style="margin-top:10px">The mobile browser has its own persistent anonymous Firebase UID. Add this UID to the existing approved POS-device list in your Firestore Security Rules, alongside the Windows POS UID. Keep the existing restrictions; do not enable public database writes. Do not clear this PWA site data after approval.</p></div><div class="card"><h2>Customer & Receipt Data</h2><p class="muted">Customer name and mobile can be saved during billing. Entering the same mobile on a future bill automatically finds the saved customer. Receipts print on a white background with larger text.</p></div><div class="card"><h2>Data Integrity</h2><p class="muted">Orders, KOTs, menu, inventory, suppliers and expenses are stored in Firestore collections and sync in real time across devices. Historical order/menu prices are captured at time of sale.</p></div></div>`}
 async function saveSettings(){
  if(!firebaseReady()) return;
  const tax=Math.max(0,+document.getElementById('taxSet').value||0);
