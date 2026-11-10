@@ -985,6 +985,216 @@ body{
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style id="fh-mobile-cart-checkout-fix">
+.mobile-cart-extra{display:none!important}
+@media (max-width:800px){
+  .pos .cart{
+    display:flex!important;
+    flex-direction:column!important;
+    height:90dvh!important;
+    max-height:90dvh!important;
+    min-height:240px!important;
+    overflow:hidden!important;
+    box-sizing:border-box!important;
+    padding-bottom:calc(14px + env(safe-area-inset-bottom))!important;
+  }
+  .pos .cart .cart-items{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior-y:contain!important;
+  }
+  .pos .cart .totals,.pos .cart .actions{
+    flex:0 0 auto!important;
+    flex-shrink:0!important;
+    min-width:0!important;
+  }
+  .pos .cart .actions{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    width:100%!important;
+    margin-top:9px!important;
+    padding-bottom:2px!important;
+  }
+  .pos .cart .actions .btn{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:44px!important;
+    margin:0!important;
+    padding:10px 7px!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+    font-size:12px!important;
+    line-height:1.25!important;
+  }
+  .pos .cart .actions .mobile-cart-extra{display:flex!important}
+  .pos .cart .actions .btn.primary{grid-column:1/-1!important}
+}
+</style>
+
+<style id="fh-mobile-cart-opaque-sheet-fix">
+@media (max-width:800px){
+  /* A fully opaque, independent sheet: no menu content can bleed through. */
+  #mobileCartScrim{
+    display:block!important;
+    position:fixed!important;
+    inset:0!important;
+    z-index:120!important;
+    background:rgba(0,0,0,.74)!important;
+    -webkit-backdrop-filter:none!important;
+    backdrop-filter:none!important;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+  }
+  #mobileCartScrim.visible{
+    opacity:1!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+  }
+  .pos .cart{
+    position:fixed!important;
+    inset:auto 0 0 0!important;
+    z-index:130!important;
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    height:min(90dvh,760px)!important;
+    height:min(90vh,760px)!important;
+    height:min(90dvh,760px)!important;
+    max-height:calc(100dvh - env(safe-area-inset-top) - 8px)!important;
+    min-height:0!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+    padding:14px 14px calc(14px + env(safe-area-inset-bottom))!important;
+    overflow:hidden!important;
+    border:1px solid rgba(255,255,255,.18)!important;
+    border-bottom:0!important;
+    border-radius:22px 22px 0 0!important;
+    background:#070c16!important;
+    background-image:none!important;
+    -webkit-backdrop-filter:none!important;
+    backdrop-filter:none!important;
+    box-shadow:0 -18px 55px rgba(0,0,0,.62)!important;
+    isolation:isolate!important;
+  }
+  .pos .cart.mobile-cart-open{
+    transform:translate3d(0,0,0)!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+  }
+  .pos .cart .section-title,
+  .pos .cart>.muted,
+  .pos .cart .totals,
+  .pos .cart .actions{
+    position:relative!important;
+    z-index:1!important;
+    flex:0 0 auto!important;
+    flex-shrink:0!important;
+    min-width:0!important;
+  }
+  .pos .cart .cart-items{
+    position:relative!important;
+    z-index:1!important;
+    display:block!important;
+    flex:1 1 auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior:contain!important;
+    scrollbar-gutter:stable;
+  }
+  .pos .cart .totals{
+    margin-top:8px!important;
+    padding-top:8px!important;
+    background:#070c16!important;
+  }
+  .pos .cart .actions{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    width:100%!important;
+    margin-top:9px!important;
+    padding:0 0 2px!important;
+    background:#070c16!important;
+  }
+  .pos .cart .actions .btn{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:44px!important;
+    margin:0!important;
+    padding:10px 7px!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+    font-size:12px!important;
+    line-height:1.25!important;
+  }
+  .pos .cart .actions .btn.primary{grid-column:1/-1!important}
+  .pos .cart .mobile-cart-close{z-index:3!important;flex:0 0 auto!important}
+  /* Keep the underlying page from moving while the sheet is open. */
+  html.mobile-cart-visible,body.mobile-cart-visible{
+    overflow:hidden!important;
+    overscroll-behavior:none!important;
+  }
+}
+</style>
+<style id="fh-mobile-cart-portal-layer">
+@media (max-width:800px){
+  /* Top-level portal layer: not a child of .app, .main, .page or .pos. */
+  #mobileCartSheet{
+    position:fixed!important;inset:0!important;z-index:130!important;
+    display:flex!important;align-items:flex-end!important;justify-content:center!important;
+    pointer-events:none!important;visibility:hidden!important;overflow:hidden!important;
+    isolation:isolate!important;
+  }
+  #mobileCartSheet:has(.cart.mobile-cart-open){
+    pointer-events:auto!important;visibility:visible!important;
+  }
+  #mobileCartSheet .cart{
+    position:absolute!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;
+    width:100%!important;height:min(88dvh,760px)!important;max-height:calc(100dvh - env(safe-area-inset-top) - 8px)!important;
+    min-height:260px!important;max-width:none!important;margin:0!important;box-sizing:border-box!important;
+    display:flex!important;flex-direction:column!important;overflow:hidden!important;
+    padding:14px 14px calc(14px + env(safe-area-inset-bottom))!important;
+    border:1px solid rgba(255,255,255,.18)!important;border-bottom:0!important;border-radius:22px 22px 0 0!important;
+    background:#070c16!important;background-image:none!important;color:#f4f7fc!important;
+    -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+    box-shadow:0 -18px 55px rgba(0,0,0,.68)!important;isolation:isolate!important;
+    transform:translate3d(0,110%,0)!important;visibility:hidden!important;pointer-events:none!important;
+    transition:transform .24s ease,visibility 0s linear .24s!important;
+  }
+  #mobileCartSheet .cart.mobile-cart-open{
+    transform:translate3d(0,0,0)!important;visibility:visible!important;pointer-events:auto!important;
+    transition:transform .24s ease,visibility 0s!important;
+  }
+  #mobileCartSheet .cart .section-title,#mobileCartSheet .cart>.muted,
+  #mobileCartSheet .cart .totals,#mobileCartSheet .cart .actions{flex:0 0 auto!important;flex-shrink:0!important;min-width:0!important;}
+  #mobileCartSheet .cart .section-title{padding-right:48px!important;min-height:42px!important;}
+  #mobileCartSheet .cart .cart-items{flex:1 1 auto!important;min-height:0!important;max-height:none!important;
+    overflow-x:hidden!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;}
+  #mobileCartSheet .cart .totals,#mobileCartSheet .cart .actions{background:#070c16!important;position:relative!important;z-index:2!important;}
+  #mobileCartSheet .cart .actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;width:100%!important;margin-top:9px!important;padding-bottom:2px!important;}
+  #mobileCartSheet .cart .actions .btn{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-width:0!important;min-height:46px!important;margin:0!important;padding:9px 7px!important;white-space:normal!important;overflow-wrap:anywhere!important;font-size:12px!important;line-height:1.25!important;}
+  #mobileCartSheet .cart .actions .btn.primary{grid-column:1/-1!important;}
+  #mobileCartSheet .cart .mobile-cart-close{position:absolute!important;top:10px!important;right:12px!important;z-index:5!important;}
+  #mobileCartScrim{z-index:125!important;background:rgba(0,0,0,.68)!important;}
+  #mobileCartScrim.visible{opacity:1!important;visibility:visible!important;pointer-events:auto!important;}
+  html.mobile-cart-visible,body.mobile-cart-visible{overflow:hidden!important;overscroll-behavior:none!important;}
+}
+</style>
+
 </head>
 <body>
 <div id="fhWallpaperLayer" aria-hidden="true"></div>
@@ -2050,7 +2260,41 @@ function syncMobileShell(){
  const nav=document.getElementById('mobileBottomNav');
  const bar=document.getElementById('mobileCartBar');
  const scrim=document.getElementById('mobileCartScrim');
- const cart=document.querySelector('#pages .cart');
+ let sheet=document.getElementById('mobileCartSheet');
+ if(!sheet){
+  sheet=document.createElement('div');
+  sheet.id='mobileCartSheet';
+  sheet.setAttribute('aria-label','Mobile order cart');
+  document.body.appendChild(sheet);
+ }
+ const pageCart=document.querySelector('#pages .cart');
+ let cart=pageCart||sheet.querySelector('.cart');
+ /* On phones, move the actual cart node out of the POS grid. This avoids
+    transformed/grid ancestors clipping fixed positioning and stacking. */
+ if(mobile&&state.page==='pos'&&pageCart){
+  const stale=sheet.querySelector('.cart');
+  if(stale&&stale!==pageCart) stale.remove();
+  const oldPlaceholder=document.querySelector('[data-mobile-cart-placeholder]');
+  if(oldPlaceholder) oldPlaceholder.remove();
+  const placeholder=document.createElement('span');
+  placeholder.hidden=true;
+  placeholder.setAttribute('data-mobile-cart-placeholder','');
+  pageCart.parentNode.insertBefore(placeholder,pageCart);
+  sheet.appendChild(pageCart);
+  cart=pageCart;
+ }else if(!mobile||state.page!=='pos'){
+  const portalCart=sheet.querySelector('.cart');
+  if(portalCart){
+   const placeholder=document.querySelector('[data-mobile-cart-placeholder]');
+   if(state.page==='pos'){
+    const posGrid=document.querySelector('#pages .pos');
+    if(placeholder&&placeholder.parentNode) placeholder.parentNode.insertBefore(portalCart,placeholder);
+    else if(posGrid) posGrid.appendChild(portalCart);
+   }else portalCart.remove();
+   if(placeholder) placeholder.remove();
+  }
+  cart=document.querySelector('#pages .cart');
+ }
  if(!mobile||state.page!=='pos'||!cart) mobileCartOpen=false;
  if(nav){
   nav.style.display=mobile?'grid':'none';
@@ -2072,6 +2316,7 @@ function syncMobileShell(){
   if(count) count.textContent=`${summary.count} item${summary.count===1?'':'s'} in order`;
  }
  if(cart){cart.classList.toggle('mobile-cart-open',mobile&&mobileCartOpen);cart.id='mobile-pos-cart';cart.setAttribute('aria-hidden',String(!(mobile&&mobileCartOpen)));}
+ if(sheet){sheet.classList.toggle('open',mobile&&state.page==='pos'&&mobileCartOpen);sheet.setAttribute('aria-hidden',String(!(mobile&&state.page==='pos'&&mobileCartOpen)));}
  if(scrim) scrim.classList.toggle('visible',mobile&&mobileCartOpen);
  document.body.classList.toggle('mobile-cart-visible',mobile&&mobileCartOpen);
  document.documentElement.classList.toggle('mobile-cart-visible',mobile&&mobileCartOpen);
@@ -2116,6 +2361,7 @@ function firebaseReady(){if(!db||!fs||firebaseStatus!=='connected'){toast('Datab
 function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 const BUSINESS_ADDRESS='Skyhut, Feeling Hungry Cafe, Central Bazaar, Nahan';
 function sanitizeText(value,maxLength=200){return String(value??'').replace(/[\u0000-\u001F\u007F]/g,' ').replace(/\s+/g,' ').trim().slice(0,maxLength)}
+function maskReceiptMobile(value){const digits=String(value??'').replace(/\D/g,'');if(!digits)return 'N/A';return digits.length<=4?'*'.repeat(digits.length):'*'.repeat(Math.max(0,digits.length-4))+digits.slice(-4)}
 function getSequenceMax(prefix,records){
  const re=new RegExp('^'+prefix+'(\\d{1,6})$','i');
  return Math.max(0,...(records||[]).map(record=>{const raw=String(record?.code||record?.kotCode||'');const match=raw.match(re);return match?Number(match[1]):0}).filter(Number.isFinite));
@@ -2158,16 +2404,45 @@ const FH_PRINTER_STORAGE_KEY='feeling_hungry_bt_printer_v1';
 const FH_PRINTER_SERVICES=['000018f0-0000-1000-8000-00805f9b34fb','e7810a71-73ae-499d-8c15-faa9aef0c3f2','00001101-0000-1000-8000-00805f9b34fb'];
 const FH_PRINTER_CHARACTERISTICS=['00002af1-0000-1000-8000-00805f9b34fb'];
 let fhBtDevice=null,fhBtServer=null,fhBtCharacteristic=null,fhBtStatus='Disconnected';
+let fhBtManualDisconnect=false,fhBtReconnectPromise=null,fhBtReconnectTimer=null;
 function setPrinterStatus(status){
  fhBtStatus=status;const label=document.getElementById('fhPrinterStatus');
  if(label){label.textContent=status;label.className='printer-status '+(status.startsWith('Connected')?'connected':status==='Connecting…'?'connecting':'');}
  const name=document.getElementById('fhPrinterDeviceName');if(name)name.textContent=fhBtDevice?.name||'No printer selected';
 }
+function printerPlatform(){
+ const ua=navigator.userAgent||'';
+ const isIOS=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ const isAndroid=/Android/i.test(ua);
+ const isBluefy=/Bluefy/i.test(ua);
+ const isChrome=/CriOS|Chrome/i.test(ua);
+ return {isIOS,isAndroid,isBluefy,isChrome};
+}
+function printerGuidance(){
+ const p=printerPlatform();
+ if(p.isIOS&&!p.isBluefy)return 'iPhone/iPad: Safari and Chrome on iOS do not expose Web Bluetooth. Open this HTTPS POS page in Bluefy and allow Bluetooth. The printer must support BLE GATT; Bluetooth Classic SPP printers cannot connect from this web app.';
+ if(p.isIOS&&p.isBluefy)return 'Bluefy detected. Allow Bluetooth when prompted. The printer must support BLE GATT; Bluetooth Classic SPP is not supported.';
+ if(p.isAndroid)return 'Android: use Chrome, keep Bluetooth enabled, allow nearby-device permissions when prompted, and enable Location services if your Android version requires it for BLE discovery.';
+ return 'Desktop: use a supported Chromium browser over HTTPS. Bluetooth Classic SPP requires a native app/bridge; this web app supports BLE GATT printers.';
+}
 function printerSupported(){
  return !!(window.isSecureContext && navigator.bluetooth && typeof navigator.bluetooth.requestDevice==='function');
 }
+function printerUnsupportedMessage(){
+ const p=printerPlatform();
+ if(p.isIOS&&!p.isBluefy)return 'Web Bluetooth is unavailable in iOS Safari/Chrome. Open this POS in Bluefy for BLE printing, or use the browser print preview. The printer must support BLE GATT.';
+ return 'Web Bluetooth is not supported here. Use Chrome on Android or a compatible BLE browser such as Bluefy on iOS, over HTTPS. Bluetooth Classic SPP is not supported by this web app.';
+}
 function printerDeviceDisconnected(){fhBtServer=null;fhBtCharacteristic=null;setPrinterStatus('Disconnected')}
-function onPrinterGattDisconnected(){printerDeviceDisconnected();toast('Bluetooth printer disconnected')}
+function onPrinterGattDisconnected(){
+ printerDeviceDisconnected();
+ if(!fhBtManualDisconnect && localStorage.getItem(FH_PRINTER_STORAGE_KEY)){
+  clearTimeout(fhBtReconnectTimer);
+  fhBtReconnectTimer=setTimeout(()=>reconnectBluetoothPrinter(true).catch(()=>{}),900);
+ }
+}
+function savedPrinter(){try{return JSON.parse(localStorage.getItem(FH_PRINTER_STORAGE_KEY)||'null')}catch(_){return null}}
+function bluetoothDeviceApi(){return navigator.bluetooth&&typeof navigator.bluetooth.getDevices==='function'}
 async function findPrinterCharacteristic(server){
  if(!server)throw new Error('Bluetooth GATT server is unavailable');
  const services=[];
@@ -2180,11 +2455,11 @@ async function findPrinterCharacteristic(server){
   }
   try{const chars=await service.getCharacteristics();const writable=chars.find(ch=>ch&&(ch.properties?.write||ch.properties?.writeWithoutResponse));if(writable)return writable}catch(_){}
  }
- throw new Error('No writable BLE printer characteristic found. This printer may use Bluetooth Classic SPP, which Web Bluetooth cannot access.');
+ throw new Error('No writable BLE GATT characteristic found. This printer may use Bluetooth Classic SPP, which this web app cannot access. Try a BLE ESC/POS printer or a native printer app.');
 }
 async function attachPrinter(device){
  if(!device?.gatt)throw new Error('Selected device does not expose Bluetooth LE GATT');
- setPrinterStatus('Connecting…');fhBtDevice=device;
+ fhBtManualDisconnect=false;setPrinterStatus('Connecting…');fhBtDevice=device;
  try{
   device.removeEventListener?.('gattserverdisconnected',onPrinterGattDisconnected);
   device.addEventListener?.('gattserverdisconnected',onPrinterGattDisconnected);
@@ -2192,31 +2467,47 @@ async function attachPrinter(device){
   if(!fhBtServer?.connected)throw new Error('Could not establish a GATT connection');
   fhBtCharacteristic=await findPrinterCharacteristic(fhBtServer);
   if(!fhBtCharacteristic)throw new Error('Printer write characteristic is unavailable');
-  try{localStorage.setItem(FH_PRINTER_STORAGE_KEY,JSON.stringify({id:device.id,name:device.name||'POS-58'}))}catch(_){}
-  setPrinterStatus('Connected: '+(device.name||'POS-58'));toast('Bluetooth printer connected');return true;
+  try{localStorage.setItem(FH_PRINTER_STORAGE_KEY,JSON.stringify({id:device.id,name:device.name||'POS-58',savedAt:Date.now()}))}catch(_){}
+  setPrinterStatus('Connected: '+(device.name||'POS-58'));return true;
  }catch(error){printerDeviceDisconnected();throw error}
 }
+// This is the only function that opens the browser's Bluetooth device chooser.
+// Run it once during setup; subsequent sessions use the browser's saved grant.
 async function connectBluetoothPrinter(){
- if(!printerSupported())return toast('Web Bluetooth is not supported on this browser/device. Please use Chrome on Android or a compatible BLE app like Bluefy on iOS.');
+ if(!printerSupported())return toast(printerUnsupportedMessage());
  try{
-  setPrinterStatus('Connecting…');
+  setPrinterStatus('Selecting printer…');
   const device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:FH_PRINTER_SERVICES});
-  await attachPrinter(device);
+  await attachPrinter(device);toast('Printer paired. Future reconnects will use the saved browser permission.');
  }catch(error){
   setPrinterStatus('Disconnected');
-  toast(error?.name==='NotFoundError'?'No printer selected':error?.name==='NotAllowedError'?'Bluetooth permission was not granted':`Printer connection failed: ${String(error?.message||error).slice(0,100)}`);
+  toast(error?.name==='NotFoundError'?'No printer selected':error?.name==='NotAllowedError'?'Bluetooth access was not granted. Pair the printer once from this button.':`Printer connection failed: ${String(error?.message||error).slice(0,130)}`);
  }
 }
-async function reconnectBluetoothPrinter(){
- if(!printerSupported())return toast('Web Bluetooth is not supported on this browser/device. Please use Chrome on Android or a compatible BLE app like Bluefy on iOS.');
- try{
-  const saved=JSON.parse(localStorage.getItem(FH_PRINTER_STORAGE_KEY)||'null');if(!saved)return connectBluetoothPrinter();
-  if(!navigator.bluetooth.getDevices)return toast('Tap Connect Bluetooth Printer and select your POS-58 printer.');
-  setPrinterStatus('Connecting…');const devices=await navigator.bluetooth.getDevices();const device=devices.find(d=>d.id===saved.id)||devices.find(d=>d.name===saved.name);
-  if(!device)return connectBluetoothPrinter();await attachPrinter(device);
- }catch(error){setPrinterStatus('Disconnected');toast('Could not reconnect. Select the printer again.')}
+// Reconnect never opens requestDevice and never asks for a new permission.
+async function reconnectBluetoothPrinter(silent=false){
+ if(fhBtDevice?.gatt?.connected&&fhBtCharacteristic)return true;
+ if(!printerSupported()){if(!silent)toast(printerUnsupportedMessage());return false;}
+ if(fhBtReconnectPromise)return fhBtReconnectPromise;
+ fhBtReconnectPromise=(async()=>{
+  const saved=savedPrinter();
+  if(!saved){if(!silent)toast('Pair the printer once using “Pair Printer”.');return false;}
+  if(!bluetoothDeviceApi()){if(!silent)toast('This browser cannot restore saved Bluetooth access. Pair again in a supported BLE browser.');return false;}
+  try{
+   setPrinterStatus('Reconnecting…');
+   const devices=await navigator.bluetooth.getDevices();
+   const device=devices.find(d=>d.id===saved.id)||(saved.name?devices.find(d=>d.name===saved.name):null);
+   if(!device){if(!silent)toast('Saved printer access is unavailable. Use Pair Printer once to authorize it again.');setPrinterStatus('Disconnected');return false;}
+   await attachPrinter(device);if(!silent)toast('Saved printer reconnected.');return true;
+  }catch(error){setPrinterStatus('Disconnected');if(!silent)toast('Could not reconnect to saved printer. Check that it is powered on and nearby.');return false;}
+ })();
+ try{return await fhBtReconnectPromise}finally{fhBtReconnectPromise=null}
 }
-function disconnectBluetoothPrinter(){try{if(fhBtDevice?.gatt?.connected)fhBtDevice.gatt.disconnect()}catch(_){}fhBtDevice=null;printerDeviceDisconnected();toast('Printer disconnected')}
+function disconnectBluetoothPrinter(){
+ fhBtManualDisconnect=true;clearTimeout(fhBtReconnectTimer);
+ try{if(fhBtDevice?.gatt?.connected)fhBtDevice.gatt.disconnect()}catch(_){}
+ fhBtDevice=null;printerDeviceDisconnected();toast('Printer disconnected')
+}
 function escPosBytes(...parts){const flat=[];for(const part of parts){if(part instanceof Uint8Array)flat.push(...part);else if(Array.isArray(part))flat.push(...part);else if(typeof part==='number')flat.push(part&255)}return new Uint8Array(flat)}
 function escPosText(value){return new TextEncoder().encode(String(value??'').replace(/₹/g,'Rs ').replace(/[^\x09\x0A\x0D\x20-\x7E]/g,'?'))}
 function escPosLine(text=''){return escPosBytes(escPosText(text),[0x0A])}
@@ -2229,10 +2520,12 @@ function escPosHeader(title,subtitle=''){return escPosBytes(escPosAlign(1),escPo
 function buildEscPosReceipt(order,customer=null){
  const items=Array.isArray(order?.items)?order.items:[],subtotal=Number(order.subtotal??items.reduce((a,i)=>a+Number(i.price||0)*Number(i.qty||0),0)),discount=Number(order.discount||0),tax=Number(order.tax||0),total=Number(order.total||0);
  const date=order.date||new Date().toLocaleDateString('en-IN'),time=order.time||new Date().toLocaleTimeString('en-IN'),table=order.type==='DINE-IN'?(order.table||order.tableName||'—'):(order.type||'—');
- const parts=[[0x1B,0x40],escPosHeader('Feeling Hungry','CAFE • NAHAN'),escPosAlign(0),escPosLine('Bill: '+(order.code||'—')),escPosLine('Date: '+date+'  '+time),escPosLine('Type: '+(order.type||'—')+' Table: '+table),escPosLine('Customer: '+(customer?.name||order.customerName||'Walk-in')),escPosLine('--------------------------------'),escPosLine(printColumns('ITEM','QTY','AMOUNT'))];
+ const customerName=customer?.name||order.customerName||'Walk-in',customerMobile=maskReceiptMobile(customer?.mobile||order.customerMobile||'');
+ const cashier=sanitizeText(order.cashier||state.currentUser?.name||state.user?.name||'biller',40);
+ const parts=[[0x1B,0x40],escPosAlign(1),escPosBold(true),escPosDouble(true),escPosLine('Feeling Hungry'),escPosLine('Cafe'),escPosLine('SKYHUT NAHAN'),escPosDouble(false),escPosBold(false),escPosLine('--------------------------------'),escPosAlign(0),escPosLine('Bill: '+(order.code||'—')),escPosLine('Date: '+date+'  '+time),escPosLine('Type: '+(order.type||'—')+' Table: '+table),escPosLine('Customer: '+customerName),escPosLine('Mobile: '+customerMobile),escPosLine('Cashier: '+cashier),escPosLine('--------------------------------'),escPosLine(printColumns('ITEM','QTY','AMOUNT'))];
  items.forEach(item=>{const qty=Math.max(1,Number(item.qty)||1),price=Number(item.price||0);parts.push(escPosLine(printColumns(item.name||'Item',String(qty),(price*qty).toFixed(2))));if(item.note)parts.push(escPosLine(' Note: '+item.note))});
  parts.push(escPosLine('--------------------------------'),escPosAlign(2),escPosLine('Subtotal: Rs '+subtotal.toFixed(2)));if(discount)parts.push(escPosLine('Discount: -Rs '+discount.toFixed(2)));if(tax)parts.push(escPosLine('Tax: Rs '+tax.toFixed(2)));
- parts.push(escPosBold(true),escPosLine('TOTAL: Rs '+total.toFixed(2)),escPosBold(false),escPosAlign(1),escPosLine('Payment: '+(order.payment||'—')),escPosLine('Thanks & Visit Again!'),escPosLine(''),escPosLine(''),escPosLine(''),escPosLine(''),[0x1D,0x56,0x00]);return escPosBytes(...parts)
+ parts.push(escPosBold(true),escPosLine('TOTAL: Rs '+total.toFixed(2)),escPosBold(false),escPosAlign(1),escPosLine('Payment: '+(order.payment||'Not selected')),escPosLine('Thanks & Visit Again!'),escPosLine(''),escPosLine(''),escPosLine(''),escPosLine(''),[0x1D,0x56,0x00]);return escPosBytes(...parts)
 }
 function buildEscPosKOT(order){
  const items=Array.isArray(order?.items)?order.items:[],table=order.tableName||order.table||'—';
@@ -2240,64 +2533,71 @@ function buildEscPosKOT(order){
  items.forEach(item=>{parts.push(escPosBold(true),escPosLine(fitPrintText(item.name||'Item',30)),escPosBold(false),escPosLine(' QTY: '+(Number(item.qty)||1)));if(item.note)parts.push(escPosLine(' NOTE: '+item.note))});
  parts.push(escPosLine('--------------------------------'),escPosAlign(1),escPosLine('END OF KITCHEN TICKET'),escPosLine(''),escPosLine(''),[0x1D,0x56,0x00]);return escPosBytes(...parts)
 }
-async function sendBluetoothBytes(bytes){
+async function sendBluetoothBytes(bytes,options={}){
+ if(!fhBtCharacteristic||!fhBtDevice?.gatt?.connected){
+  const restored=await reconnectBluetoothPrinter(true);
+  if(!restored)throw new Error('Printer is not connected. Pair it once in Printer Settings, then retry.');
+ }
  const characteristic=fhBtCharacteristic;
  if(!characteristic||!fhBtDevice?.gatt?.connected)throw new Error('Bluetooth printer is not connected');
- if(!characteristic.properties||(!characteristic.properties.write&&!characteristic.properties.writeWithoutResponse))throw new Error('Printer characteristic does not support writing');
+ const props=characteristic.properties||{};
+ if(!props.write&&!props.writeWithoutResponse)throw new Error('Printer characteristic does not support writing');
  if(!bytes||!bytes.length)throw new Error('No print data to send');
- const chunkSize=Math.min(100,Math.max(20,Number(characteristic.maxWriteValueLength)||20));
+ // Receipts are longer than KOTs. Use acknowledged BLE writes where available
+ // and conservative packet sizes to avoid overflowing small thermal-printer buffers.
+ const canAck=props.write&&typeof characteristic.writeValueWithResponse==='function';
+ const rawMax=Number(characteristic.maxWriteValueLength)||20;
+ const chunkSize=Math.max(20,Math.min(Number(options.chunkSize)|| (canAck?rawMax:20),rawMax,100));
+ const delayMs=Math.max(0,Number(options.delayMs ?? (canAck?8:40)));
  for(let offset=0;offset<bytes.length;offset+=chunkSize){
   if(!fhBtCharacteristic||fhBtCharacteristic!==characteristic||!fhBtDevice?.gatt?.connected)throw new Error('Printer disconnected during printing');
   const chunk=bytes.slice(offset,offset+chunkSize);
-  if(characteristic.properties.writeWithoutResponse&&typeof characteristic.writeValueWithoutResponse==='function')await characteristic.writeValueWithoutResponse(chunk);
-  else if(typeof characteristic.writeValueWithResponse==='function')await characteristic.writeValueWithResponse(chunk);
-  else if(typeof characteristic.writeValue==='function')await characteristic.writeValue(chunk);
+  if(canAck) await characteristic.writeValueWithResponse(chunk);
+  else if(typeof characteristic.writeValueWithoutResponse==='function') await characteristic.writeValueWithoutResponse(chunk);
+  else if(typeof characteristic.writeValue==='function') await characteristic.writeValue(chunk);
+  else if(typeof characteristic.writeValueWithResponse==='function') await characteristic.writeValueWithResponse(chunk);
   else throw new Error('Printer write operation is unavailable');
-  if(offset+chunkSize<bytes.length)await new Promise(resolve=>setTimeout(resolve,18));
+  if(offset+chunkSize<bytes.length&&delayMs)await new Promise(resolve=>setTimeout(resolve,delayMs));
  }
  return true;
 }
-async function printBluetoothReceipt(order,customer=null){try{await sendBluetoothBytes(buildEscPosReceipt(order,customer));toast('Receipt sent to Bluetooth printer');return true}catch(error){toast('Bluetooth print failed. Use print preview or reconnect printer.');return false}}
-async function printBluetoothKOT(order){try{await sendBluetoothBytes(buildEscPosKOT(order));toast('KOT sent to Bluetooth printer');return true}catch(error){toast('Bluetooth KOT failed. Use print preview or reconnect printer.');return false}}
+async function printBluetoothReceipt(order,customer=null){
+ try{
+  const receiptBytes=buildEscPosReceipt(order,customer);
+  await sendBluetoothBytes(receiptBytes,{chunkSize:20,delayMs:45});
+  toast('Receipt sent to Bluetooth printer');
+  return true;
+ }catch(error){
+  console.warn('Bluetooth receipt printing failed:',error);
+  toast('Receipt not printed: '+String(error?.message||error).slice(0,110));
+  return false;
+ }
+}
+async function printBluetoothKOT(order){
+ try{await sendBluetoothBytes(buildEscPosKOT(order));toast('KOT sent to Bluetooth printer');return true}
+ catch(error){console.warn('Bluetooth KOT printing failed:',error);toast('KOT print failed: '+String(error?.message||error).slice(0,110));return false}
+}
 async function printBluetoothTest(){if(!fhBtCharacteristic)return toast('Connect a Bluetooth printer first');const test={code:'TEST-001',date:new Date().toLocaleDateString('en-IN'),time:new Date().toLocaleTimeString('en-IN'),type:'TEST',table:'—',customerName:'Printer test',items:[{name:'Bluetooth Test',qty:1,price:10}],subtotal:10,tax:0,discount:0,total:10,payment:'TEST'};await printBluetoothReceipt(test)}
 function openPrinterSettings(){
  const saved=(()=>{try{return JSON.parse(localStorage.getItem(FH_PRINTER_STORAGE_KEY)||'null')}catch(_){return null}})();
  openModal(`<button class="close" onclick="closeModal()">×</button><h2>🖨 Printer Settings</h2><p class="muted">Connect a compatible BLE ESC/POS thermal printer (58mm / POS-58).</p><div class="printer-settings-grid">
- <div class="printer-info"><b>Connection</b><div style="margin-top:8px"><span id="fhPrinterStatus" class="printer-status ${fhBtDevice?.gatt?.connected?'connected':''}">${esc(fhBtStatus)}</span></div><div style="margin-top:8px">Device: <b id="fhPrinterDeviceName">${esc(fhBtDevice?.name||saved?.name||'No printer selected')}</b></div><small>${saved?'Previously paired device saved':'No paired device saved'}</small></div>
- <div class="printer-actions"><button class="btn primary" onclick="requestPrinterPermissions()">Request Permissions &amp; Bluetooth</button><button class="btn" onclick="connectBluetoothPrinter()">Connect Bluetooth Printer</button><button class="btn" onclick="reconnectBluetoothPrinter()">Reconnect</button><button class="btn danger" onclick="disconnectBluetoothPrinter()">Disconnect</button><button class="btn good" onclick="printBluetoothTest()">Print Test Receipt</button></div>
- <div id="fhPrinterPermissionStatus" class="printer-info" role="status" aria-live="polite">Android requires Location services enabled to discover nearby Bluetooth Low Energy (BLE) thermal printers.</div><div class="printer-info"><b>Compatibility</b><br>Requires HTTPS (or localhost), supported Chrome-based browser, Bluetooth enabled, and a BLE writable GATT characteristic. PIN entry is handled by Android/printer firmware. Bluetooth Classic SPP requires a native Android bridge.</div></div>
- <div class="printer-info"><b>Android BLE discovery</b><br>Android requires Location services to be enabled on the device to discover nearby Bluetooth Low Energy (BLE) thermal printers. This app requests browser location permission as part of setup; also enable the phone's Location toggle.</div><div class="section"><h3>App Permissions</h3><p class="muted">Grant permissions when needed. Full Android APK permission declarations require a native wrapper and AndroidManifest.xml.</p>
- <div class="permission-row"><div><b>Location</b><div class="muted">Location-based features</div></div><button class="btn" onclick="requestAppPermission('location')">Allow Location</button></div>
- <div class="permission-row"><div><b>Notifications</b><div class="muted">Order and app alerts</div></div><button class="btn" onclick="requestAppPermission('notifications')">Allow Notifications</button></div>
- <div class="permission-row"><div><b>Camera</b><div class="muted">QR scanning, if supported</div></div><button class="btn" onclick="requestAppPermission('camera')">Allow Camera</button></div></div>`)
+ <div class="printer-info"><b>Connection</b><div style="margin-top:8px"><span id="fhPrinterStatus" class="printer-status ${fhBtDevice?.gatt?.connected?'connected':''}">${esc(fhBtStatus)}</span></div><div style="margin-top:8px">Device: <b id="fhPrinterDeviceName">${esc(fhBtDevice?.name||saved?.name||'No printer selected')}</b></div><small>${saved?'Saved pairing found — automatic reconnect enabled':'Pair once to save this printer in this browser'}</small></div>
+ <div class="printer-actions"><button class="btn primary" onclick="requestPrinterPermissions()">Pair Printer (first-time setup)</button><button class="btn" onclick="reconnectBluetoothPrinter()">Reconnect Saved Printer</button><button class="btn danger" onclick="disconnectBluetoothPrinter()">Disconnect</button><button class="btn good" onclick="printBluetoothTest()">Print Test Receipt</button></div>
+ <div id="fhPrinterPermissionStatus" class="printer-info" role="status" aria-live="polite">${esc(printerGuidance())}</div><div class="printer-info"><b>Device compatibility</b><br>${esc(printerGuidance())}<br><br>Requires HTTPS (or localhost), a browser with Web Bluetooth, Bluetooth enabled, and a BLE writable GATT characteristic. iOS Safari and Chrome do not provide Web Bluetooth; use Bluefy for compatible BLE printers. Bluetooth Classic SPP requires a native Android/iOS app or vendor bridge.</div></div>
+ <div class="printer-info"><b>Mobile setup</b><br>${esc(printerGuidance())}<br><br>On Android, enable the phone's Location toggle if BLE discovery requires it. On iPhone/iPad, browser support is limited to compatible BLE browsers such as Bluefy; iOS Safari/Chrome cannot directly access Web Bluetooth.</div><div class="section"><h3>One-time printer setup</h3><p class="muted">Pair the printer once using the button above. The browser remembers the Bluetooth grant; this POS then reconnects silently when the browser supports saved-device access. No location permission is requested for printing. On Android, turn on the phone's Location services toggle only if the operating system requires it for BLE discovery.</p></div>`)
 }
 async function requestPrinterPermissions(){
- const locationPromise=new Promise(resolve=>{
-  if(!navigator.geolocation){resolve('Location API is unavailable in this browser.');return;}
-  try{navigator.geolocation.getCurrentPosition(
-   ()=>resolve('Location permission granted.'),
-   error=>resolve(error?.code===1?'Location permission denied.':error?.code===2?'Location unavailable; enable device Location services.':'Location check timed out.'),
-   {enableHighAccuracy:false,timeout:10000,maximumAge:60000}
-  )}catch(_){resolve('Could not request location permission.')}
- });
- let bluetoothMessage='';
  if(!printerSupported()){
-  bluetoothMessage='Web Bluetooth is not supported on this browser/device. Please use Chrome on Android or a compatible BLE app like Bluefy on iOS.';
-  toast(bluetoothMessage);
- }else{
-  try{
-   setPrinterStatus('Connecting…');
-   const device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:FH_PRINTER_SERVICES});
-   await attachPrinter(device);
-   bluetoothMessage='Bluetooth device selected and connected.';
-  }catch(error){
-   setPrinterStatus('Disconnected');
-   bluetoothMessage=error?.name==='NotFoundError'?'Bluetooth device selection was cancelled.':error?.name==='NotAllowedError'?'Bluetooth permission was not granted.':'Bluetooth request failed: '+String(error?.message||error).slice(0,90);
-  }
+  const message=printerUnsupportedMessage();
+  const status=document.getElementById('fhPrinterPermissionStatus');if(status)status.textContent=message+' '+printerGuidance();
+  toast(message);return false;
  }
- const locationMessage=await locationPromise;
+ // Bluetooth chooser is invoked directly from this button click. No geolocation
+ // prompt is requested: location permission is not part of the Web Bluetooth API.
+ await connectBluetoothPrinter();
  const status=document.getElementById('fhPrinterPermissionStatus');
- if(status)status.textContent=bluetoothMessage+' '+locationMessage+' Android requires Location services enabled to discover nearby BLE thermal printers.';
+ if(status)status.textContent=(fhBtDevice?.gatt?.connected?'Printer paired and connected. Saved browser authorization will be reused on future visits. ':'Pairing was not completed. ')+printerGuidance();
+ return !!(fhBtDevice?.gatt?.connected&&fhBtCharacteristic);
 }
 async function requestAppPermission(kind){
  try{
@@ -2463,7 +2763,7 @@ function pos(){
    <div class="card" style="margin-bottom:10px"><div class="filters"><select class="select" onchange="state.orderType=this.value;render()"><option>DINE-IN</option><option>TAKEAWAY</option><option>DELIVERY</option></select><select class="select" onchange="tableAction(this.value)" ${state.orderType!=='DINE-IN'?'disabled':''}><option value="">Select table</option>${state.tables.map(t=>`<option value="${esc(t.id)}" ${state.selectedTable===t.name?'selected':''}>${esc(t.name)}</option>`).join('')}</select><button class="btn" onclick="holdBill()">Hold Bill</button><button class="btn" onclick="retrieveBill()">Retrieve</button></div></div>
    <div id="posProducts" class="products">${renderPosProductsHtml()}</div>
  </div>
- <div class="card cart"><button type="button" class="mobile-cart-close" onclick="closeMobileCart()" aria-label="Close cart">×</button><div class="section-title"><h2>${state.reorderBillId?'New Reorder Items':'Current Order'}</h2><span class="badge">${state.orderType}</span></div><div class="muted">${state.reorderBillId?'Only the newly added items are shown here.':'Order #FH-'+String(1048+state.orders.length).padStart(4,'0')+(state.orderType==='DINE-IN'?' • '+state.selectedTable:'')}</div><div class="cart-items">${state.cart.length?state.cart.map((x,i)=>`<div class="cart-line"><div class="row"><b>${esc(x.name)}</b><b>${money(x.price*x.qty)}</b></div><div class="row muted">${money(x.price)} each <div class="qty"><button type="button" data-cart-action="qty" data-cart-index="${i}" data-qty-delta="-1">−</button>${x.qty}<button type="button" data-cart-action="qty" data-cart-index="${i}" data-qty-delta="1">+</button><button type="button" data-cart-action="remove" data-cart-index="${i}">×</button></div></div><label class="kot-note-label">Special Note<input class="input kot-note-input" value="${String(x.note||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}" placeholder="e.g. No onion, extra cheese, less spicy" data-cart-note-index="${i}"></label></div>`).join(''):`<div class="empty">Cart is empty<br><small>${state.reorderBillId?'Add the new reorder item(s) from the menu above.':'Add menu items to begin.'}</small></div>`}</div><div class="totals">${state.reorderBillId?`<div><span>New Items Subtotal</span><b>${money(newSubtotal)}</b></div><div><span>New Items Tax</span><b>${money(currentTax)}</b></div><div class="total"><span>New Items Total</span><span>${money(currentTotal)}</span></div>`:`<div><span>Subtotal</span><b>${money(newSubtotal)}</b></div><div><span>Discount</span><b>${money(currentDiscount)}</b></div><div><span>Tax ${state.settings.tax}%</span><b>${money(currentTax)}</b></div><div class="total"><span>Total</span><span>${money(currentTotal)}</span></div>`}</div><div class="actions">${state.reorderBillId?`<button class="btn blue" onclick="submitReorder(this)">🔁 Add Reorder + Print KOT</button><button class="btn" onclick="cancelReorder()">Cancel Reorder</button>`:`<button class="btn blue" onclick="sendKOT(this)">Send KOT</button><button class="btn" onclick="printKOT()">Print KOT</button><button class="btn primary" onclick="payBill(this)">Pay ${money(currentTotal)}</button>`}</div></div></div>`;
+ <div class="card cart"><button type="button" class="mobile-cart-close" onclick="closeMobileCart()" aria-label="Close cart">×</button><div class="section-title"><h2>${state.reorderBillId?'New Reorder Items':'Current Order'}</h2><span class="badge">${state.orderType}</span></div><div class="muted">${state.reorderBillId?'Only the newly added items are shown here.':'Order #FH-'+String(1048+state.orders.length).padStart(4,'0')+(state.orderType==='DINE-IN'?' • '+state.selectedTable:'')}</div><div class="cart-items">${state.cart.length?state.cart.map((x,i)=>`<div class="cart-line"><div class="row"><b>${esc(x.name)}</b><b>${money(x.price*x.qty)}</b></div><div class="row muted">${money(x.price)} each <div class="qty"><button type="button" data-cart-action="qty" data-cart-index="${i}" data-qty-delta="-1">−</button>${x.qty}<button type="button" data-cart-action="qty" data-cart-index="${i}" data-qty-delta="1">+</button><button type="button" data-cart-action="remove" data-cart-index="${i}">×</button></div></div><label class="kot-note-label">Special Note<input class="input kot-note-input" value="${String(x.note||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}" placeholder="e.g. No onion, extra cheese, less spicy" data-cart-note-index="${i}"></label></div>`).join(''):`<div class="empty">Cart is empty<br><small>${state.reorderBillId?'Add the new reorder item(s) from the menu above.':'Add menu items to begin.'}</small></div>`}</div><div class="totals">${state.reorderBillId?`<div><span>New Items Subtotal</span><b>${money(newSubtotal)}</b></div><div><span>New Items Tax</span><b>${money(currentTax)}</b></div><div class="total"><span>New Items Total</span><span>${money(currentTotal)}</span></div>`:`<div><span>Subtotal</span><b>${money(newSubtotal)}</b></div><div><span>Discount</span><b>${money(currentDiscount)}</b></div><div><span>Tax ${state.settings.tax}%</span><b>${money(currentTax)}</b></div><div class="total"><span>Total</span><span>${money(currentTotal)}</span></div>`}</div><div class="actions">${state.reorderBillId?`<button class="btn blue" onclick="submitReorder(this)">🔁 Add Reorder + Print KOT</button><button class="btn" onclick="cancelReorder()">Cancel Reorder</button>`:`<button class="btn blue" onclick="sendKOT(this)">Send KOT</button><button class="btn" onclick="printKOT()">Print KOT</button><button class="btn" type="button" onclick="printCartReceipt()">Print Receipt</button><button class="btn primary" onclick="payBill(this)">Pay ${money(currentTotal)}</button><button class="btn mobile-cart-extra" type="button" onclick="holdBill()">Hold Bill</button><button class="btn mobile-cart-extra" type="button" onclick="retrieveBill()">Retrieve Bill</button>`}</div></div></div>`;
 }
 function isBuildYourOwnBurger(m){
  return /build\s*(your|ur)?\s*own\s*burger/i.test(String(m?.name||''));
@@ -2833,6 +3133,45 @@ th.qtyhead{text-align:right;width:${width===58?23:29}px}
 
 // Manual print — used by the "Print KOT" buttons. Opens a real window,
 // which is fine here because it's always triggered by a user click.
+async function printCartReceipt(){
+  const items=(state.cart||[]).filter(item=>Number(item.qty)>0).map(item=>({...item}));
+  if(!items.length) return toast('Add items to the cart before printing a receipt');
+  const totals=mobileCartSummary();
+  const table=state.orderType==='DINE-IN'?sanitizeText(state.selectedTable,32):'—';
+  const customerName=sanitizeText(state.pendingCustomer?.name||document.getElementById('custName')?.value||'',60);
+  const draftOrder={
+    code:nextBillCode(),
+    date:new Date().toLocaleDateString('en-GB'),
+    time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    type:state.orderType,
+    table,
+    cashier:sanitizeText(state.currentUser?.name||state.user?.name||'biller',40),
+    customerName,
+    customerMobile:String(state.pendingCustomer?.mobile||document.getElementById('custMobile')?.value||'').replace(/\D/g,'').slice(0,10),
+    cashier:sanitizeText(state.currentUser?.name||state.user?.name||localStorage.getItem('feeling_hungry_cashier')||'biller',40),
+    payment:'Not selected',
+    items,
+    subtotal:totals.subtotal,
+    discount:totals.discount,
+    tax:totals.tax,
+    total:totals.total
+  };
+  // Reserve the print window synchronously inside the button tap. Mobile browsers
+  // often block a popup opened only after receipt HTML has been generated.
+  let receiptWindow=null;
+  if(!(fhBtCharacteristic&&fhBtDevice?.gatt?.connected)){
+    try{receiptWindow=window.open('about:blank','_blank','width=420,height=800');}catch(error){console.warn('Receipt window could not be opened:',error)}
+  }
+  if(fhBtCharacteristic&&fhBtDevice?.gatt?.connected){
+    await printBluetoothReceipt(draftOrder,{name:customerName,mobile:draftOrder.customerMobile});
+    return;
+  }
+  const printed=printReceipt(draftOrder,{name:customerName,mobile:draftOrder.customerMobile},receiptWindow);
+  if(!printed && !receiptWindow){
+    toast('Receipt could not open. Allow pop-ups for this POS and try again.');
+  }
+}
+
 function printKOT(customOrder=null,targetWindow=null){
   const table=state.orderType==='DINE-IN'?sanitizeText(state.selectedTable,32):'—';
   const source=customOrder || {
@@ -3059,41 +3398,41 @@ function receiptHtml(order,customer){
 @page{size:${width}mm auto;margin:0}
 html,body{width:${width}mm;max-width:${width}mm;margin:0;padding:0;background:#fff!important;color:#000!important;overflow-wrap:anywhere}
 *{box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;font-size:${narrow?12:14}px;font-weight:700;padding:${narrow?'2mm 2mm 2mm':'3mm 3.5mm 3mm'};line-height:1.18}
+body{font-family:Arial,Helvetica,sans-serif;font-size:${narrow?13:15}px;font-weight:700;padding:${narrow?'2mm 2mm 2mm':'3mm 3.5mm 3mm'};line-height:1.18}
 .center{text-align:center;overflow-wrap:anywhere}
-.header{font-weight:900;font-size:${narrow?16:19}px;line-height:1.15;margin-bottom:1px;text-transform:none}.subtitle{font-size:${narrow?10:12}px;font-weight:900;letter-spacing:1px;margin:0 auto 2px}
-.address{font-size:${narrow?11:14}px;line-height:1.2;font-weight:700;overflow-wrap:anywhere}
-.phone{font-size:${narrow?11:14}px;line-height:1.2;font-weight:800}
+.header{font-weight:900;font-size:${narrow?19:22}px;line-height:1.12;margin-bottom:0;text-transform:none}.header-cafe{font-weight:900;font-size:${narrow?18:21}px;line-height:1.12;margin:0 0 3px}.subtitle{display:inline-block;font-size:${narrow?13:15}px;font-weight:900;letter-spacing:1.1px;margin:2px auto 4px;padding:2px 7px;border-top:2px solid #000;border-bottom:2px solid #000}
+.address{font-size:${narrow?12:15}px;line-height:1.2;font-weight:700;overflow-wrap:anywhere}
+.phone{font-size:${narrow?12:15}px;line-height:1.2;font-weight:800}
 .line{border-top:1.5px solid #000;margin:${narrow?'5px 0':'8px 0'}}
 .name-line{font-size:${narrow?12:14}px;font-weight:800;display:flex;align-items:flex-end;gap:4px;margin:5px 0 7px}
 .name-line .fill{flex:1;min-width:0;border-bottom:1px solid #000;min-height:15px;overflow-wrap:anywhere}
-.meta-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:4px;row-gap:3px;font-size:${narrow?10:13}px;font-weight:700;margin-bottom:6px;overflow-wrap:anywhere}
+.meta-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:4px;row-gap:3px;font-size:${narrow?11:14}px;font-weight:700;margin-bottom:6px;overflow-wrap:anywhere}
 .meta-grid .right{text-align:left;min-width:0;overflow-wrap:anywhere}
 .items{width:100%;border-collapse:collapse;table-layout:fixed}
-.items th{font-weight:900;text-align:left;border-bottom:1.5px solid #000;padding:${narrow?'4px 1px':'5px 2px 6px'};font-size:${narrow?10:14}px;white-space:nowrap}
-.items td{padding:${narrow?'5px 1px 1px':'7px 2px 1px'};vertical-align:top;font-size:${narrow?11:14}px;font-weight:800;overflow-wrap:anywhere;word-break:break-word}
+.items th{font-weight:900;text-align:left;border-bottom:1.5px solid #000;padding:${narrow?'5px 1px':'6px 2px 7px'};font-size:${narrow?11:15}px;white-space:nowrap}
+.items td{padding:${narrow?'6px 1px 2px':'8px 2px 2px'};vertical-align:top;font-size:${narrow?12:15}px;font-weight:800;overflow-wrap:anywhere;word-break:break-word}
 .items .item{width:42%;word-wrap:break-word}.items .qty{width:12%;text-align:center}.items .price{width:22%;text-align:right;white-space:nowrap}.items .amount{width:24%;text-align:right;white-space:nowrap}
 .item-note{display:block;font-size:${narrow?9:11}px;font-weight:600;margin-top:2px;white-space:normal}
 .totals-line{border-top:1.5px solid #000;margin-top:6px;padding-top:6px}
 .total-summary{display:flex;justify-content:space-between;gap:5px;font-size:${narrow?10:14}px;font-weight:800;white-space:normal}
-.grand-line{border-top:1.5px solid #000;margin-top:7px;padding-top:7px;text-align:center;font-size:${narrow?16:19}px;font-weight:800;overflow-wrap:anywhere}
+.grand-line{border-top:1.5px solid #000;margin-top:8px;padding-top:8px;text-align:center;font-size:${narrow?18:21}px;font-weight:800;overflow-wrap:anywhere}
 .payment-label{text-align:center;font-size:${narrow?10:13}px;font-weight:700;letter-spacing:.1px;margin:8px auto 3px}.receipt-qr{display:block;width:${narrow?'68%':'70%'};max-width:48mm;height:auto;margin:0 auto 5px;image-rendering:pixelated;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .footer-line{border-top:1.5px solid #000;margin-top:8px;padding-top:5px;text-align:center;font-size:${narrow?12:15}px;font-weight:800}
 @media print{html,body{width:${width}mm!important}}
 </style></head><body>
-<div class="center"><div class="header">Feeling Hungry</div><div class="subtitle">CAFE • NAHAN</div><div class="address">${esc(BUSINESS_ADDRESS)}</div><div class="phone">M : 8219635159</div></div>
+<div class="center"><div class="header">Feeling Hungry</div><div class="header-cafe">Cafe</div><div class="subtitle">SKYHUT NAHAN</div><div class="address">${esc(BUSINESS_ADDRESS)}</div><div class="phone">M : 8219635159</div></div>
 <div class="line"></div>
-<div class="name-line"><span>Name:</span><span class="fill">${esc(customer?.name||order.customerName||'')}</span></div>
-<div class="meta-grid"><div>Date: ${esc(date)}</div><div class="right"><b>${esc(order.type==='DINE-IN'?'Dine In: '+dineIn:dineIn)}</b></div><div>${esc(time)}</div><div class="right">Bill No.: ${esc(cleanBill)}</div><div>Cashier: ${esc(cashier)}</div><div></div></div>
+<div class="name-line"><span>Name:</span><span class="fill">${esc(customer?.name||order.customerName||'Walk-in')}</span></div>
+<div class="meta-grid"><div>Mobile: ${esc(maskReceiptMobile(customer?.mobile||order.customerMobile||''))}</div><div class="right">Cashier: ${esc(cashier)}</div><div>Date: ${esc(date)}</div><div class="right"><b>${esc(order.type==='DINE-IN'?'Dine In: '+dineIn:dineIn)}</b></div><div>${esc(time)}</div><div class="right">Bill No.: ${esc(cleanBill)}</div><div>Payment: ${esc(order.payment||'Not selected')}</div><div></div></div>
 <div class="line"></div><table class="items"><thead><tr><th>Item</th><th>Qty.</th><th style="text-align:right">Price</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="totals-line"><div class="total-summary"><span>Total Qty: ${totalQty}</span><span>Sub Total: ${Number(order.subtotal||0).toFixed(2)}</span></div></div>
+<div class="totals-line"><div class="total-summary"><span>Total Qty: ${totalQty}</span><span>Sub Total: ${Number(order.subtotal||0).toFixed(2)}</span></div><div class="total-summary"><span>Discount</span><span>${Number(order.discount||0).toFixed(2)}</span></div><div class="total-summary"><span>Tax</span><span>${Number(order.tax||0).toFixed(2)}</span></div></div>
 <div class="grand-line">Grand Total &nbsp; ₹ ${Number(order.total||0).toFixed(2)}</div>
 <img class="receipt-qr" src="${UPI_RECEIPT_QR_DATA}" alt="UPI payment QR code"><div class="payment-label">Scan to Pay: Q034723908@ybl</div><div class="footer-line">Thanks &amp; Visit Again!!</div>
 <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),1200)}<\/script></body></html>`;
 }
 let receiptPrintFrame=null;
 function printReceipt(order,customer,targetWindow){
-  if(fhBtCharacteristic&&fhBtDevice?.gatt?.connected){if(targetWindow&&!targetWindow.closed)try{targetWindow.close()}catch(_){};printBluetoothReceipt(order,customer);return true;}
+  if(fhBtCharacteristic&&fhBtDevice?.gatt?.connected){if(targetWindow&&!targetWindow.closed)try{targetWindow.close()}catch(_){};return printBluetoothReceipt(order,customer);}
   const w=targetWindow||window.open('','_blank','width=420,height=800');
   const receiptDocument=receiptHtml(order,customer);
   if(w){
@@ -3119,7 +3458,7 @@ function printReceipt(order,customer,targetWindow){
     );
     frameDocument.open();frameDocument.write(iframeHtml);frameDocument.close();
     frameWindow.addEventListener('afterprint',()=>{if(receiptPrintFrame&&receiptPrintFrame.isConnected)receiptPrintFrame.remove();receiptPrintFrame=null;},{once:true});
-    toast('Receipt opened in the print fallback. Select the POS58 printer.');
+    toast('Receipt print view prepared. If it does not appear, allow pop-ups for this POS and tap Print Receipt again.');
     return true;
   }catch(error){
     console.error('Receipt print fallback failed:',error);
@@ -4491,7 +4830,14 @@ function render(){
   if(pagesEl) pagesEl.innerHTML=`<div class="card"><b>POS display error</b><p class="muted">${esc(err?.message||err)}</p><button class="btn primary" onclick="location.reload()">Reload POS</button></div>`;
  }
 }
-window.addEventListener('load',()=>{if(localStorage.getItem(FH_PRINTER_STORAGE_KEY)&&navigator.bluetooth?.getDevices){reconnectBluetoothPrinter().catch(()=>{})}},{once:true});
+function fhTryRestoreSavedPrinter(){
+ if(!localStorage.getItem(FH_PRINTER_STORAGE_KEY)||fhBtManualDisconnect)return;
+ if(!fhBtDevice?.gatt?.connected)reconnectBluetoothPrinter(true).catch(()=>{});
+}
+window.addEventListener('load',fhTryRestoreSavedPrinter,{once:true});
+window.addEventListener('focus',fhTryRestoreSavedPrinter);
+window.addEventListener('online',fhTryRestoreSavedPrinter);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')fhTryRestoreSavedPrinter()});
 render();
 </script>
 
