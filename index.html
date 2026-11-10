@@ -1338,7 +1338,7 @@ function describeFirebaseError(error) {
   const code = String(error?.code || '').toLowerCase();
   const detail = String(error?.message || error || 'Unknown Firebase error');
   if (code.includes('permission-denied')) {
-    return 'Firestore denied access for this POS device. Check the anonymous device UID and your existing Firestore security rules. Do not make the database public. Details: ' + detail;
+    return 'Firestore denied access for this browser/device. On a newly used phone, its anonymous POS Device UID may not yet be allow-listed in your Firestore security rules. Copy the POS Device UID from this device and add it using your existing secure POS-device rule; do not make the database public. Details: ' + detail;
   }
   if (code.includes('unauthenticated')) {
     return 'Firebase authentication is not available for this browser session. Confirm Anonymous sign-in is enabled in Firebase Authentication. Details: ' + detail;
@@ -1426,8 +1426,32 @@ async function initFirebase() {
 
     const existingApp = appMod.getApps().find(item => item.name === '[DEFAULT]');
     const app = existingApp || appMod.initializeApp(firebaseConfig);
-    db = fs.getFirestore(app);
+
+    // Mobile Safari/Chrome networks and some carrier/Wi-Fi proxies can
+    // interrupt Firestore's default WebChannel transport. Long polling is
+    // more tolerant on mobile and still uses the same secure Firestore API.
+    // initializeFirestore must be used before any getFirestore call for this app.
+    try {
+      db = fs.initializeFirestore(app, { experimentalForceLongPolling: true });
+      console.info('[POS Firebase] Firestore transport: long-polling (mobile-compatible).');
+    } catch (firestoreInitError) {
+      // Reuse an already-created Firestore instance during hot reloads.
+      if (String(firestoreInitError?.code || '').includes('failed-precondition') ||
+          /already been.*initialized|already exists/i.test(String(firestoreInitError?.message || ''))) {
+        db = fs.getFirestore(app);
+      } else {
+        throw firestoreInitError;
+      }
+    }
+
     auth = fa.getAuth(app);
+    // Keep the anonymous device identity stable across browser restarts.
+    // This matters because Firestore security rules may allow-list this POS UID.
+    try {
+      await fa.setPersistence(auth, fa.browserLocalPersistence);
+    } catch (persistenceError) {
+      console.warn('[POS Firebase] Persistent auth storage unavailable; using the SDK session state.', persistenceError);
+    }
 
     // Wait for persisted anonymous auth to restore; create it only when absent.
     let user = await waitForInitialAuthState();
@@ -1440,6 +1464,8 @@ async function initFirebase() {
     firebaseDeviceUid = user.uid;
     console.info('[POS Firebase] Browser origin:', location.origin);
     console.info('[POS Firebase] Anonymous POS device UID:', firebaseDeviceUid);
+    // Explicitly bring the Firestore network online before registering listeners.
+    await fs.enableNetwork(db);
     await startAuthenticatedFirestore();
   } catch (error) {
     console.error('Firebase initialization error:', error);
@@ -2401,14 +2427,26 @@ loadSavedTableCarts();
 
 // ---------------- Native in-app Bluetooth thermal printing (Web Bluetooth BLE) ----------------
 const FH_PRINTER_STORAGE_KEY='feeling_hungry_bt_printer_v1';
-const FH_PRINTER_SERVICES=['000018f0-0000-1000-8000-00805f9b34fb','e7810a71-73ae-499d-8c15-faa9aef0c3f2','00001101-0000-1000-8000-00805f9b34fb'];
+const FH_PRINTER_SERVICES=['000018f0-0000-1000-8000-00805f9b34fb','e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
 const FH_PRINTER_CHARACTERISTICS=['00002af1-0000-1000-8000-00805f9b34fb'];
+const FH_NATIVE_PRINTER_STORAGE_KEY='feeling_hungry_native_serial_printer_v1';
 let fhBtDevice=null,fhBtServer=null,fhBtCharacteristic=null,fhBtStatus='Disconnected';
 let fhBtManualDisconnect=false,fhBtReconnectPromise=null,fhBtReconnectTimer=null;
+let fhNativeBtDevice=null,fhNativeBtConnected=false;
+function nativeBluetoothSerial(){return window.bluetoothSerial||window.cordova?.plugins?.bluetoothSerial||null}
+function nativeBtCall(method,...args){
+ return new Promise((resolve,reject)=>{
+  const api=nativeBluetoothSerial();
+  if(!api||typeof api[method]!=='function')return reject(new Error('Native Bluetooth Serial plugin is not installed in this APK'));
+  try{api[method](...args,resolve,error=>reject(error instanceof Error?error:new Error(String(error||method+' failed'))))}
+  catch(error){reject(error)}
+ });
+}
+function isPrinterConnected(){return !!(fhNativeBtConnected||(fhBtCharacteristic&&fhBtDevice?.gatt?.connected))}
 function setPrinterStatus(status){
  fhBtStatus=status;const label=document.getElementById('fhPrinterStatus');
  if(label){label.textContent=status;label.className='printer-status '+(status.startsWith('Connected')?'connected':status==='Connecting…'?'connecting':'');}
- const name=document.getElementById('fhPrinterDeviceName');if(name)name.textContent=fhBtDevice?.name||'No printer selected';
+ const name=document.getElementById('fhPrinterDeviceName');if(name)name.textContent=fhNativeBtDevice?.name||fhBtDevice?.name||'No printer selected';
 }
 function printerPlatform(){
  const ua=navigator.userAgent||'';
@@ -2419,19 +2457,19 @@ function printerPlatform(){
  return {isIOS,isAndroid,isBluefy,isChrome};
 }
 function printerGuidance(){
+ if(nativeBluetoothSerial())return 'Native Bluetooth Serial detected. Select a paired POS printer below. Android Bluetooth permissions are handled by the installed native plugin.';
  const p=printerPlatform();
- if(p.isIOS&&!p.isBluefy)return 'iPhone/iPad: Safari and Chrome on iOS do not expose Web Bluetooth. Open this HTTPS POS page in Bluefy and allow Bluetooth. The printer must support BLE GATT; Bluetooth Classic SPP printers cannot connect from this web app.';
- if(p.isIOS&&p.isBluefy)return 'Bluefy detected. Allow Bluetooth when prompted. The printer must support BLE GATT; Bluetooth Classic SPP is not supported.';
- if(p.isAndroid)return 'Android: use Chrome, keep Bluetooth enabled, allow nearby-device permissions when prompted, and enable Location services if your Android version requires it for BLE discovery.';
- return 'Desktop: use a supported Chromium browser over HTTPS. Bluetooth Classic SPP requires a native app/bridge; this web app supports BLE GATT printers.';
+ if(p.isIOS&&!p.isBluefy)return 'iPhone/iPad: Safari and Chrome on iOS do not expose Web Bluetooth. Use a supported BLE browser or a native iOS printer bridge. Classic SPP requires native integration.';
+ if(p.isIOS&&p.isBluefy)return 'Bluefy detected. Allow Bluetooth when prompted. The printer must support BLE GATT; Bluetooth Classic SPP requires a native bridge.';
+ if(p.isAndroid)return 'Android WebView needs a native Bluetooth Serial plugin for Classic SPP printers. BLE GATT can use Web Bluetooth only in a supported secure browser.';
+ return 'Desktop: use a supported Chromium browser over HTTPS for BLE. Bluetooth Classic SPP requires a native app/bridge.';
 }
 function printerSupported(){
- return !!(window.isSecureContext && navigator.bluetooth && typeof navigator.bluetooth.requestDevice==='function');
+ return !!nativeBluetoothSerial() || !!(window.isSecureContext && navigator.bluetooth && typeof navigator.bluetooth.requestDevice==='function');
 }
 function printerUnsupportedMessage(){
- const p=printerPlatform();
- if(p.isIOS&&!p.isBluefy)return 'Web Bluetooth is unavailable in iOS Safari/Chrome. Open this POS in Bluefy for BLE printing, or use the browser print preview. The printer must support BLE GATT.';
- return 'Web Bluetooth is not supported here. Use Chrome on Android or a compatible BLE browser such as Bluefy on iOS, over HTTPS. Bluetooth Classic SPP is not supported by this web app.';
+ if(!nativeBluetoothSerial())return 'This app has no native Bluetooth Serial bridge. Install the Bluetooth Serial plugin in the Android project and rebuild the APK. Web Bluetooth alone is not available in this WebView.';
+ return 'Bluetooth is unavailable. Check the native Bluetooth plugin and Android permissions.';
 }
 function printerDeviceDisconnected(){fhBtServer=null;fhBtCharacteristic=null;setPrinterStatus('Disconnected')}
 function onPrinterGattDisconnected(){
@@ -2442,6 +2480,7 @@ function onPrinterGattDisconnected(){
  }
 }
 function savedPrinter(){try{return JSON.parse(localStorage.getItem(FH_PRINTER_STORAGE_KEY)||'null')}catch(_){return null}}
+function savedNativePrinter(){try{return JSON.parse(localStorage.getItem(FH_NATIVE_PRINTER_STORAGE_KEY)||'null')}catch(_){return null}}
 function bluetoothDeviceApi(){return navigator.bluetooth&&typeof navigator.bluetooth.getDevices==='function'}
 async function findPrinterCharacteristic(server){
  if(!server)throw new Error('Bluetooth GATT server is unavailable');
@@ -2455,7 +2494,7 @@ async function findPrinterCharacteristic(server){
   }
   try{const chars=await service.getCharacteristics();const writable=chars.find(ch=>ch&&(ch.properties?.write||ch.properties?.writeWithoutResponse));if(writable)return writable}catch(_){}
  }
- throw new Error('No writable BLE GATT characteristic found. This printer may use Bluetooth Classic SPP, which this web app cannot access. Try a BLE ESC/POS printer or a native printer app.');
+ throw new Error('No writable BLE GATT characteristic found. This printer may use Bluetooth Classic SPP. Use the native Bluetooth Serial connection in the Android app.');
 }
 async function attachPrinter(device){
  if(!device?.gatt)throw new Error('Selected device does not expose Bluetooth LE GATT');
@@ -2467,26 +2506,91 @@ async function attachPrinter(device){
   if(!fhBtServer?.connected)throw new Error('Could not establish a GATT connection');
   fhBtCharacteristic=await findPrinterCharacteristic(fhBtServer);
   if(!fhBtCharacteristic)throw new Error('Printer write characteristic is unavailable');
-  try{localStorage.setItem(FH_PRINTER_STORAGE_KEY,JSON.stringify({id:device.id,name:device.name||'POS-58',savedAt:Date.now()}))}catch(_){}
-  setPrinterStatus('Connected: '+(device.name||'POS-58'));return true;
+  try{localStorage.setItem(FH_PRINTER_STORAGE_KEY,JSON.stringify({id:device.id,name:device.name||'BLE printer',savedAt:Date.now()}))}catch(_){}
+  setPrinterStatus('Connected: '+(device.name||'BLE printer'));return true;
  }catch(error){printerDeviceDisconnected();throw error}
 }
-// This is the only function that opens the browser's Bluetooth device chooser.
-// Run it once during setup; subsequent sessions use the browser's saved grant.
+async function nativeSerialConnect(device,silent=false){
+ const api=nativeBluetoothSerial();
+ if(!api)throw new Error('Native Bluetooth Serial plugin is not installed in this APK');
+ if(!device?.address)throw new Error('Selected printer has no Bluetooth address');
+ setPrinterStatus('Connecting…');
+ try{
+  if(typeof api.isEnabled==='function'){
+   const enabled=await nativeBtCall('isEnabled');
+   if(!enabled){
+    if(typeof api.enable!=='function')throw new Error('Enable Bluetooth in Android settings and retry');
+    await nativeBtCall('enable');
+   }
+  }
+  await nativeBtCall('connect',device.address);
+  fhNativeBtDevice={name:device.name||'POS printer',address:device.address};
+  fhNativeBtConnected=true;
+  try{localStorage.setItem(FH_NATIVE_PRINTER_STORAGE_KEY,JSON.stringify({...fhNativeBtDevice,savedAt:Date.now()}))}catch(_){}
+  setPrinterStatus('Connected: '+fhNativeBtDevice.name);
+  if(!silent)toast('Native printer connected');
+  return true;
+ }catch(error){
+  fhNativeBtConnected=false;fhNativeBtDevice=null;setPrinterStatus('Disconnected');
+  throw error;
+ }
+}
+async function connectNativeBluetoothPrinter(){
+ const api=nativeBluetoothSerial();
+ if(!api)return false;
+ try{
+  setPrinterStatus('Checking Bluetooth…');
+  if(typeof api.isEnabled==='function'){
+   const enabled=await nativeBtCall('isEnabled');
+   if(!enabled){
+    if(typeof api.enable!=='function')throw new Error('Turn on Bluetooth in Android settings, then retry');
+    await nativeBtCall('enable');
+   }
+  }
+  let devices=await nativeBtCall('list');
+  if(!Array.isArray(devices))devices=[];
+  if(!devices.length&&typeof api.discoverUnpaired==='function'){
+   setPrinterStatus('Searching for printers…');
+   devices=await nativeBtCall('discoverUnpaired');
+   if(!Array.isArray(devices))devices=[];
+  }
+  if(!devices.length)throw new Error('No Bluetooth printers found. Pair POS58 in Android Bluetooth settings, then tap Pair Printer again.');
+  let selected=devices[0];
+  if(devices.length>1){
+   const choices=devices.map((d,i)=>`${i+1}. ${d.name||'Unknown device'} (${d.address||'no address'})`).join('\n');
+   const answer=window.prompt('Select your printer by number:\n'+choices,'1');
+   if(answer===null){setPrinterStatus('Disconnected');return false}
+   const index=Number(answer)-1;
+   if(!Number.isInteger(index)||index<0||index>=devices.length)throw new Error('Invalid printer selection');
+   selected=devices[index];
+  }
+  return await nativeSerialConnect(selected,false);
+ }catch(error){
+  setPrinterStatus('Disconnected');
+  toast('Printer connection failed: '+String(error?.message||error).slice(0,145));
+  return false;
+ }
+}
+// First use: native Classic SPP when the wrapper plugin is installed; otherwise BLE browser pairing.
 async function connectBluetoothPrinter(){
+ if(nativeBluetoothSerial())return connectNativeBluetoothPrinter();
  if(!printerSupported())return toast(printerUnsupportedMessage());
  try{
   setPrinterStatus('Selecting printer…');
   const device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:FH_PRINTER_SERVICES});
-  await attachPrinter(device);toast('Printer paired. Future reconnects will use the saved browser permission.');
+  await attachPrinter(device);toast('BLE printer paired. Future reconnects will use the saved browser permission.');
  }catch(error){
   setPrinterStatus('Disconnected');
   toast(error?.name==='NotFoundError'?'No printer selected':error?.name==='NotAllowedError'?'Bluetooth access was not granted. Pair the printer once from this button.':`Printer connection failed: ${String(error?.message||error).slice(0,130)}`);
  }
 }
-// Reconnect never opens requestDevice and never asks for a new permission.
+// Reconnect uses the saved native address or the browser's saved BLE grant.
 async function reconnectBluetoothPrinter(silent=false){
- if(fhBtDevice?.gatt?.connected&&fhBtCharacteristic)return true;
+ if(nativeBluetoothSerial()){
+  const saved=savedNativePrinter();
+  if(!saved?.address){if(!silent)toast('Pair the printer once using “Pair Printer”.');return false;}
+  try{return await nativeSerialConnect(saved,silent)}catch(error){if(!silent)toast('Could not reconnect: '+String(error?.message||error).slice(0,100));return false}
+ }
  if(!printerSupported()){if(!silent)toast(printerUnsupportedMessage());return false;}
  if(fhBtReconnectPromise)return fhBtReconnectPromise;
  fhBtReconnectPromise=(async()=>{
@@ -2498,16 +2602,74 @@ async function reconnectBluetoothPrinter(silent=false){
    const devices=await navigator.bluetooth.getDevices();
    const device=devices.find(d=>d.id===saved.id)||(saved.name?devices.find(d=>d.name===saved.name):null);
    if(!device){if(!silent)toast('Saved printer access is unavailable. Use Pair Printer once to authorize it again.');setPrinterStatus('Disconnected');return false;}
-   await attachPrinter(device);if(!silent)toast('Saved printer reconnected.');return true;
+   await attachPrinter(device);if(!silent)toast('Saved BLE printer reconnected.');return true;
   }catch(error){setPrinterStatus('Disconnected');if(!silent)toast('Could not reconnect to saved printer. Check that it is powered on and nearby.');return false;}
  })();
  try{return await fhBtReconnectPromise}finally{fhBtReconnectPromise=null}
 }
 function disconnectBluetoothPrinter(){
  fhBtManualDisconnect=true;clearTimeout(fhBtReconnectTimer);
+ if(fhNativeBtConnected&&nativeBluetoothSerial()){
+  nativeBtCall('disconnect').catch(()=>{});
+ }
+ fhNativeBtConnected=false;fhNativeBtDevice=null;
  try{if(fhBtDevice?.gatt?.connected)fhBtDevice.gatt.disconnect()}catch(_){}
  fhBtDevice=null;printerDeviceDisconnected();toast('Printer disconnected')
 }
+// ---------------- Cleanter local printer bridge ----------------
+const FH_CLEANTER_CONFIG_KEY='feeling_hungry_cleanter_bridge_v1';
+function cleanterConfig(){try{return JSON.parse(localStorage.getItem(FH_CLEANTER_CONFIG_KEY)||'{}')}catch(_){return {}}}
+function cleanterBaseUrl(){const cfg=cleanterConfig();return String(cfg.url||'http://localhost:9100').trim().replace(/\/$/,'')}
+function saveCleanterSettings(){
+ const url=String(document.getElementById('fhCleanterUrl')?.value||'http://localhost:9100').trim().replace(/\/$/,'');
+ if(!/^https?:\/\//i.test(url)){toast('Enter a valid bridge URL beginning with http:// or https://');return false;}
+ const enabled=!!document.getElementById('fhCleanterEnabled')?.checked;
+ localStorage.setItem(FH_CLEANTER_CONFIG_KEY,JSON.stringify({url,enabled}));toast('Cleanter settings saved');return true;
+}
+function cleanterEnabled(){return cleanterConfig().enabled===true}
+async function checkCleanterPrinter(){
+ const response=await fetch(cleanterBaseUrl()+'/health',{method:'GET',cache:'no-store'});
+ if(!response.ok)throw new Error('Cleanter health check returned HTTP '+response.status);
+ const data=await response.json();
+ if(data.status!=='ok'||!data.printer?.connected)throw new Error('Cleanter is running, but its printer is not connected');
+ return data;
+}
+async function printWithCleanter(content){
+ try{
+  await checkCleanterPrinter();
+  const response=await fetch(cleanterBaseUrl()+'/print',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content,cut:true})});
+  if(!response.ok)throw new Error('Cleanter print request returned HTTP '+response.status);
+  return await response.json();
+ }catch(error){console.error('Cleanter printing failed:',error);throw error;}
+}
+function cleanterReceiptContent(order,customer=null){
+ const items=Array.isArray(order?.items)?order.items:[],subtotal=Number(order.subtotal??items.reduce((a,i)=>a+Number(i.price||0)*Number(i.qty||0),0));
+ const discount=Number(order.discount||0),tax=Number(order.tax||0),total=Number(order.total||0),table=order.type==='DINE-IN'?(order.table||order.tableName||'—'):(order.type||'—');
+ const rows=[{type:'text',text:'FEELING HUNGRY',align:'center',bold:true,size:'large'},{type:'text',text:'CAFE • SKYHUT NAHAN',align:'center'},{type:'divider'},
+ {type:'text',text:'Bill: '+(order.code||'—')},{type:'text',text:'Date: '+(order.date||new Date().toLocaleDateString('en-IN'))+' '+(order.time||new Date().toLocaleTimeString('en-IN'))},
+ {type:'text',text:'Type: '+(order.type||'—')+'  Table: '+table},{type:'text',text:'Customer: '+(customer?.name||order.customerName||'Walk-in')},{type:'text',text:'Mobile: '+(customer?.mobile||order.customerMobile||'—')},{type:'divider'},
+ {type:'text',text:'ITEM                  QTY     AMOUNT',bold:true}];
+ items.forEach(item=>{const qty=Math.max(1,Number(item.qty)||1);rows.push({type:'text',text:String(item.name||'Item')+'  x'+qty+'   Rs '+(Number(item.price||0)*qty).toFixed(2)});if(item.note)rows.push({type:'text',text:'Note: '+item.note})});
+ rows.push({type:'divider'},{type:'text',text:'Subtotal: Rs '+subtotal.toFixed(2),align:'right'});
+ if(discount)rows.push({type:'text',text:'Discount: -Rs '+discount.toFixed(2),align:'right'});
+ if(tax)rows.push({type:'text',text:'Tax: Rs '+tax.toFixed(2),align:'right'});
+ rows.push({type:'text',text:'TOTAL: Rs '+total.toFixed(2),align:'right',bold:true,size:'large'},{type:'divider'},{type:'text',text:'Payment: '+(order.payment||'Not selected'),align:'center'},{type:'text',text:'Thanks & Visit Again!',align:'center'},{type:'feed',lines:3});return rows;
+}
+function cleanterKOTContent(order){
+ const rows=[{type:'text',text:'KITCHEN ORDER',align:'center',bold:true,size:'large'},{type:'text',text:order.kotCode||order.code||'KOT',align:'center',bold:true},{type:'divider'},
+ {type:'text',text:'Order: '+(order.order||order.code||'—')},{type:'text',text:'Table: '+(order.tableName||order.table||'—')+' '+(order.type||'')},{type:'text',text:'Customer: '+(order.customerName||'Walk-in')},{type:'text',text:'Time: '+(order.time||new Date().toLocaleTimeString())},{type:'divider'}];
+ (Array.isArray(order.items)?order.items:[]).forEach(item=>{rows.push({type:'text',text:String(item.name||'Item'),bold:true,size:'large'},{type:'text',text:'QTY: '+(Number(item.qty)||1)});if(item.note)rows.push({type:'text',text:'NOTE: '+item.note})});
+ rows.push({type:'divider'},{type:'text',text:'END OF KITCHEN TICKET',align:'center'},{type:'feed',lines:3});return rows;
+}
+async function testCleanterPrinter(){
+ const test=[{type:'text',text:'DUORISE POS',align:'center',bold:true,size:'large'},{type:'divider'},{type:'text',text:'Printer Test Successful',align:'center'},{type:'feed',lines:3}];
+ try{await printWithCleanter(test);toast('Cleanter test receipt sent');return true}catch(error){toast('Cleanter test failed: '+String(error?.message||error).slice(0,100));return false;}
+}
+async function checkCleanterFromSettings(){
+ try{const data=await checkCleanterPrinter();toast('Cleanter connected: '+(data.printer?.name||'printer ready'));return true}
+ catch(error){toast('Cleanter unavailable: '+String(error?.message||error).slice(0,100));return false}
+}
+
 function escPosBytes(...parts){const flat=[];for(const part of parts){if(part instanceof Uint8Array)flat.push(...part);else if(Array.isArray(part))flat.push(...part);else if(typeof part==='number')flat.push(part&255)}return new Uint8Array(flat)}
 function escPosText(value){return new TextEncoder().encode(String(value??'').replace(/₹/g,'Rs ').replace(/[^\x09\x0A\x0D\x20-\x7E]/g,'?'))}
 function escPosLine(text=''){return escPosBytes(escPosText(text),[0x0A])}
@@ -2534,6 +2696,17 @@ function buildEscPosKOT(order){
  parts.push(escPosLine('--------------------------------'),escPosAlign(1),escPosLine('END OF KITCHEN TICKET'),escPosLine(''),escPosLine(''),[0x1D,0x56,0x00]);return escPosBytes(...parts)
 }
 async function sendBluetoothBytes(bytes,options={}){
+ if(fhNativeBtConnected&&nativeBluetoothSerial()){
+  if(!bytes||!bytes.length)throw new Error('No print data to send');
+  const api=nativeBluetoothSerial();
+  if(typeof api.isConnected==='function'){
+   let connected=false;try{connected=!!(await nativeBtCall('isConnected'))}catch(_){}
+   if(!connected){fhNativeBtConnected=false;const restored=await reconnectBluetoothPrinter(true);if(!restored)throw new Error('Native printer disconnected. Reconnect it in Printer Settings.')}
+  }
+  const exactBuffer=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+  await nativeBtCall('write',exactBuffer);
+  return true;
+ }
  if(!fhBtCharacteristic||!fhBtDevice?.gatt?.connected){
   const restored=await reconnectBluetoothPrinter(true);
   if(!restored)throw new Error('Printer is not connected. Pair it once in Printer Settings, then retry.');
@@ -2562,6 +2735,10 @@ async function sendBluetoothBytes(bytes,options={}){
  return true;
 }
 async function printBluetoothReceipt(order,customer=null){
+ if(cleanterEnabled()){
+  try{await printWithCleanter(cleanterReceiptContent(order,customer));toast('Receipt sent through Cleanter');return true}
+  catch(error){toast('Cleanter print failed: '+String(error?.message||error).slice(0,90));return false}
+ }
  try{
   const receiptBytes=buildEscPosReceipt(order,customer);
   await sendBluetoothBytes(receiptBytes,{chunkSize:20,delayMs:45});
@@ -2574,14 +2751,19 @@ async function printBluetoothReceipt(order,customer=null){
  }
 }
 async function printBluetoothKOT(order){
+ if(cleanterEnabled()){
+  try{await printWithCleanter(cleanterKOTContent(order));toast('KOT sent through Cleanter');return true}
+  catch(error){toast('Cleanter KOT failed: '+String(error?.message||error).slice(0,90));return false}
+ }
  try{await sendBluetoothBytes(buildEscPosKOT(order));toast('KOT sent to Bluetooth printer');return true}
  catch(error){console.warn('Bluetooth KOT printing failed:',error);toast('KOT print failed: '+String(error?.message||error).slice(0,110));return false}
 }
-async function printBluetoothTest(){if(!fhBtCharacteristic)return toast('Connect a Bluetooth printer first');const test={code:'TEST-001',date:new Date().toLocaleDateString('en-IN'),time:new Date().toLocaleTimeString('en-IN'),type:'TEST',table:'—',customerName:'Printer test',items:[{name:'Bluetooth Test',qty:1,price:10}],subtotal:10,tax:0,discount:0,total:10,payment:'TEST'};await printBluetoothReceipt(test)}
+async function printBluetoothTest(){if(!isPrinterConnected())return toast('Connect a Bluetooth printer first');const test={code:'TEST-001',date:new Date().toLocaleDateString('en-IN'),time:new Date().toLocaleTimeString('en-IN'),type:'TEST',table:'—',customerName:'Printer test',items:[{name:'Bluetooth Test',qty:1,price:10}],subtotal:10,tax:0,discount:0,total:10,payment:'TEST'};await printBluetoothReceipt(test)}
 function openPrinterSettings(){
  const saved=(()=>{try{return JSON.parse(localStorage.getItem(FH_PRINTER_STORAGE_KEY)||'null')}catch(_){return null}})();
- openModal(`<button class="close" onclick="closeModal()">×</button><h2>🖨 Printer Settings</h2><p class="muted">Connect a compatible BLE ESC/POS thermal printer (58mm / POS-58).</p><div class="printer-settings-grid">
- <div class="printer-info"><b>Connection</b><div style="margin-top:8px"><span id="fhPrinterStatus" class="printer-status ${fhBtDevice?.gatt?.connected?'connected':''}">${esc(fhBtStatus)}</span></div><div style="margin-top:8px">Device: <b id="fhPrinterDeviceName">${esc(fhBtDevice?.name||saved?.name||'No printer selected')}</b></div><small>${saved?'Saved pairing found — automatic reconnect enabled':'Pair once to save this printer in this browser'}</small></div>
+ openModal(`<button class="close" onclick="closeModal()">×</button><h2>🖨 Printer Settings</h2><p class="muted">Connect a POS58 thermal printer using native Bluetooth Serial (Classic SPP) or a compatible BLE ESC/POS printer.</p><div class="printer-settings-grid">
+ <div class="printer-info"><b>Cleanter Printer Bridge</b><p class="muted">Use Cleanter on this Android phone to print receipts and KOTs. Keep Cleanter's local bridge running while using the POS.</p><label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input id="fhCleanterEnabled" type="checkbox" ${cleanterEnabled()?'checked':''}> Use Cleanter for receipts and KOTs</label><label>Bridge URL<input id="fhCleanterUrl" class="input" value="${esc(cleanterBaseUrl())}" placeholder="http://localhost:9100"></label><div class="actions"><button class="btn" onclick="saveCleanterSettings()">Save Cleanter</button><button class="btn" onclick="checkCleanterFromSettings()">Check Connection</button><button class="btn good" onclick="testCleanterPrinter()">Test Cleanter Print</button></div><small>Enable this only after the connection test succeeds. If Cleanter reports CORS or network errors, its bridge must allow requests from this POS origin.</small></div>
+ <div class="printer-info"><b>Connection</b><div style="margin-top:8px"><span id="fhPrinterStatus" class="printer-status ${fhBtDevice?.gatt?.connected?'connected':''}">${esc(fhBtStatus)}</span></div><div style="margin-top:8px">Device: <b id="fhPrinterDeviceName">${esc(fhBtDevice?.name||saved?.name||'No printer selected')}</b></div><small>${saved?'Saved printer found — automatic reconnect enabled':'Pair once to save this printer in the app'}</small></div>
  <div class="printer-actions"><button class="btn primary" onclick="requestPrinterPermissions()">Pair Printer (first-time setup)</button><button class="btn" onclick="reconnectBluetoothPrinter()">Reconnect Saved Printer</button><button class="btn danger" onclick="disconnectBluetoothPrinter()">Disconnect</button><button class="btn good" onclick="printBluetoothTest()">Print Test Receipt</button></div>
  <div id="fhPrinterPermissionStatus" class="printer-info" role="status" aria-live="polite">${esc(printerGuidance())}</div><div class="printer-info"><b>Device compatibility</b><br>${esc(printerGuidance())}<br><br>Requires HTTPS (or localhost), a browser with Web Bluetooth, Bluetooth enabled, and a BLE writable GATT characteristic. iOS Safari and Chrome do not provide Web Bluetooth; use Bluefy for compatible BLE printers. Bluetooth Classic SPP requires a native Android/iOS app or vendor bridge.</div></div>
  <div class="printer-info"><b>Mobile setup</b><br>${esc(printerGuidance())}<br><br>On Android, enable the phone's Location toggle if BLE discovery requires it. On iPhone/iPad, browser support is limited to compatible BLE browsers such as Bluefy; iOS Safari/Chrome cannot directly access Web Bluetooth.</div><div class="section"><h3>One-time printer setup</h3><p class="muted">Pair the printer once using the button above. The browser remembers the Bluetooth grant; this POS then reconnects silently when the browser supports saved-device access. No location permission is requested for printing. On Android, turn on the phone's Location services toggle only if the operating system requires it for BLE discovery.</p></div>`)
@@ -3159,10 +3341,10 @@ async function printCartReceipt(){
   // Reserve the print window synchronously inside the button tap. Mobile browsers
   // often block a popup opened only after receipt HTML has been generated.
   let receiptWindow=null;
-  if(!(fhBtCharacteristic&&fhBtDevice?.gatt?.connected)){
+  if(!(isPrinterConnected())){
     try{receiptWindow=window.open('about:blank','_blank','width=420,height=800');}catch(error){console.warn('Receipt window could not be opened:',error)}
   }
-  if(fhBtCharacteristic&&fhBtDevice?.gatt?.connected){
+  if(isPrinterConnected()){
     await printBluetoothReceipt(draftOrder,{name:customerName,mobile:draftOrder.customerMobile});
     return;
   }
@@ -3186,7 +3368,7 @@ function printKOT(customOrder=null,targetWindow=null){
   };
   const built=buildKotTicketHTML(source,false);
   if(!built) return toast('Add items first');
-  if(fhBtCharacteristic&&fhBtDevice?.gatt?.connected){if(targetWindow&&!targetWindow.closed)try{targetWindow.close()}catch(_){};printBluetoothKOT(source);return true;}
+  if(isPrinterConnected()){if(targetWindow&&!targetWindow.closed)try{targetWindow.close()}catch(_){};printBluetoothKOT(source);return true;}
   const w=targetWindow||window.open('','_blank','width=420,height=760');
   if(!w){
     const fallbackSource={...source,id:''};
@@ -3213,7 +3395,7 @@ function getAutoPrintFrame(){
 }
 function autoPrintKOTSilently(source){
   const kotId=String(source?.id||'').trim();
-  if(fhBtCharacteristic&&fhBtDevice?.gatt?.connected){
+  if(isPrinterConnected()){
     if(kotId&&autoPrintKotsDispatched.has(kotId))return true;
     printBluetoothKOT(source).then(async ok=>{
       if(ok&&kotId)autoPrintKotsDispatched.add(kotId);
@@ -3432,7 +3614,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:${narrow?13:15}px;font-wei
 }
 let receiptPrintFrame=null;
 function printReceipt(order,customer,targetWindow){
-  if(fhBtCharacteristic&&fhBtDevice?.gatt?.connected){if(targetWindow&&!targetWindow.closed)try{targetWindow.close()}catch(_){};return printBluetoothReceipt(order,customer);}
+  if(isPrinterConnected()){if(targetWindow&&!targetWindow.closed)try{targetWindow.close()}catch(_){};return printBluetoothReceipt(order,customer);}
   const w=targetWindow||window.open('','_blank','width=420,height=800');
   const receiptDocument=receiptHtml(order,customer);
   if(w){
@@ -3516,7 +3698,7 @@ async function completePay(total,saveDetails=true,printReceiptAfterSave=false,bu
  actionButtons.forEach(el=>{el.disabled=true;el.dataset.originalText=el.textContent;el.textContent='Saving…'});
  if(button){button.disabled=true;button.textContent='Saving…'}
  let receiptWindow=null;
- if(printReceiptAfterSave && !(fhBtCharacteristic&&fhBtDevice?.gatt?.connected)){
+ if(printReceiptAfterSave && !(isPrinterConnected())){
   try{receiptWindow=window.open('about:blank','_blank','width=420,height=800');}catch(error){console.warn('Receipt window could not be opened:',error)}
  }
  const payMethod=document.getElementById('payMethod')?.value||'Cash';
